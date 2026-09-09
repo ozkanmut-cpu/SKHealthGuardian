@@ -24,6 +24,7 @@ class AlarmActivity : Activity() {
         val spo2 = intent.getIntExtra(EXTRA_SPO2, -1)
         val hr = intent.getIntExtra(EXTRA_HR, -1)
         val status = intent.getStringExtra(EXTRA_REMOTE_STATUS) ?: "SMS/arama durumu kontrol ediliyor"
+        val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -66,6 +67,7 @@ class AlarmActivity : Activity() {
             setOnClickListener {
                 getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
                 WatchCommandSender(this@AlarmActivity).silenceAlarm()
+                AlertAcknowledgementStore.acknowledge(this@AlarmActivity, if (alertTs > 0) alertTs else System.currentTimeMillis())
                 AlarmTimelineStore.add(this@AlarmActivity, "ALARM SUSTURULDU", reason)
                 finish()
             }
@@ -101,6 +103,7 @@ class AlarmActivity : Activity() {
         const val EXTRA_SPO2 = "spo2"
         const val EXTRA_HR = "hr"
         const val EXTRA_REMOTE_STATUS = "remote_status"
+        const val EXTRA_ALERT_TS = "alert_ts"
         const val CRITICAL_NOTIFICATION_ID = 100
     }
 }

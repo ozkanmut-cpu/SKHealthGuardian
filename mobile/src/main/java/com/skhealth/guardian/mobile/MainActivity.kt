@@ -47,18 +47,19 @@ class MainActivity : Activity() {
         val spo2Low = edit("Düşük SpO₂", cfg.spo2LowThreshold.toString())
         val hrHigh = edit("Yüksek nabız", cfg.heartRateHighThreshold.toString())
         val stale = edit("Veri gelmeme alarmı (dk)", (cfg.staleDataMs/60_000).toString())
-        listOf(spo2Critical, spo2Low, hrHigh, stale).forEach(root::addView)
+        val escalation = edit("Yanıt yoksa tekrar uyar (dk, 0=kapalı)", AppSettings.escalationMinutes(this).toString())
+        listOf(spo2Critical, spo2Low, hrHigh, stale, escalation).forEach(root::addView)
         root.addView(Button(this).apply { text = "Ayarları kaydet"; setOnClickListener {
             val critical = spo2Critical.text.toString().toIntOrNull() ?: 80
             val low = spo2Low.text.toString().toIntOrNull() ?: 90
             val highHr = hrHigh.text.toString().toIntOrNull() ?: 130
             val staleMinutes = stale.text.toString().toLongOrNull() ?: 10L
+            val escalationMinutes = escalation.text.toString().toIntOrNull() ?: 0
 
-            if (critical !in 50..99 || low !in 51..100 || critical >= low) {
-                return@setOnClickListener toast("SpO₂ eşiklerini kontrol et: kritik değer düşük eşikten küçük olmalı")
-            }
+            if (critical !in 50..99 || low !in 51..100 || critical >= low) return@setOnClickListener toast("SpO₂ eşiklerini kontrol et: kritik değer düşük eşikten küçük olmalı")
             if (highHr !in 60..240) return@setOnClickListener toast("Yüksek nabız eşiği 60–240 arasında olmalı")
             if (staleMinutes !in 5..120) return@setOnClickListener toast("Veri gelmeme süresi 5–120 dk arasında olmalı")
+            if (escalationMinutes !in 0..60) return@setOnClickListener toast("Tekrar uyarı süresi 0–60 dk arasında olmalı")
 
             val newConfig = AlarmConfig(
                 spo2CriticalImmediate = critical,
@@ -67,7 +68,7 @@ class MainActivity : Activity() {
                 staleDataMs = staleMinutes * 60_000L
             )
             AppSettings.save(this@MainActivity, newConfig)
-            WatchCommandSender(this@MainActivity).sendConfig(newConfig)
+            AppSettings.setEscalationMinutes(this@MainActivity, escalationMinutes)
             WatchStatusStore.mark(this@MainActivity, "CONFIG_BEKLENİYOR | saat ACK bekleniyor")
             Toast.makeText(this@MainActivity, "Kaydedildi; saat onayı bekleniyor", Toast.LENGTH_SHORT).show()
         }})
@@ -81,6 +82,7 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply { text = "Alarm olay geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, AlarmTimelineActivity::class.java)) } })
         root.addView(Button(this).apply { text = "SMS / arama kayıtları"; setOnClickListener { startActivity(Intent(this@MainActivity, DeliveryLogActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Ölçüm geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, HistoryActivity::class.java)) } })
+        root.addView(Button(this).apply { text = "Yedekle / dışa aktar"; setOnClickListener { startActivity(Intent(this@MainActivity, ExportActivity::class.java)) } })
     }
 
     private fun testSms() {

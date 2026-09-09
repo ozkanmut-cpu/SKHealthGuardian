@@ -32,4 +32,13 @@ object AppSettings {
             .apply()
         WatchCommandSender(context).sendConfig(config)
     }
+
+    fun escalationMinutes(context: Context): Int =
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("escalation_minutes", 0)
+
+    fun setEscalationMinutes(context: Context, minutes: Int) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putInt("escalation_minutes", minutes.coerceIn(0, 60))
+            .apply()
+    }
 }
