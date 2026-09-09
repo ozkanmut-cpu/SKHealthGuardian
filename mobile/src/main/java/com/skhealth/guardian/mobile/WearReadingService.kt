@@ -29,6 +29,7 @@ class WearReadingService : WearableListenerService() {
             val alertTs = p.getOrNull(0)?.toLongOrNull() ?: return
             val reason = p.getOrNull(1).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
             AlertAcknowledgementStore.acknowledge(this, alertTs)
+            EscalationScheduler.cancel(this, alertTs)
             getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
             AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, alertTs)
             return
