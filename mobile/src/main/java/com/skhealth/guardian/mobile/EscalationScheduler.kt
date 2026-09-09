@@ -19,13 +19,22 @@ object EscalationScheduler {
     @Synchronized
     fun schedule(context: Context, alertId: String, alertTs: Long, reason: String, dueAtMs: Long) {
         if (!AlertIdentity.isValid(alertId) || alertTs <= 0L || dueAtMs <= 0L) return
+        if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) return
+
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         prefs.edit()
             .putLong(DUE2_PREFIX + alertId, dueAtMs)
             .putString(REASON2_PREFIX + alertId, reason)
             .putLong(TS2_PREFIX + alertId, alertTs)
             .commit()
+
         arm(context, alertId, alertTs, reason, dueAtMs)
+
+        // ACK may race between the pre-check, persistence and AlarmManager arm. Re-check after
+        // arming so an ACK that arrived in that window cannot leave a future escalation behind.
+        if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
+            cancel(context, alertId, alertTs)
+        }
     }
 
     @Synchronized
@@ -84,7 +93,11 @@ object EscalationScheduler {
             }
             val reason = prefs.getString(REASON2_PREFIX + alertId, null) ?: "Sağlık alarmı"
             arm(context, alertId, alertTs, reason, maxOf(nowMs + 1_000L, dueAt))
-            restored++
+            if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
+                cancel(context, alertId, alertTs)
+            } else {
+                restored++
+            }
         }
 
         val legacyAck = AlertAcknowledgementStore.lastAcknowledgedAt(context)
