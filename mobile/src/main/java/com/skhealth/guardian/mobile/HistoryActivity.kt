@@ -33,9 +33,11 @@ class HistoryActivity : Activity() {
 
         rows.forEach { r ->
             val source = sourceLabel(r.source)
+            val spo2 = r.spo2
+            val heartRate = r.heartRate
             val accent = when {
                 !r.valid -> UiStyle.AMBER
-                r.spo2 != null && r.spo2 < 90 -> UiStyle.RED
+                spo2 != null && spo2 < 90 -> UiStyle.RED
                 source == "PC-60FW" -> UiStyle.GREEN
                 else -> UiStyle.BLUE
             }
@@ -45,8 +47,8 @@ class HistoryActivity : Activity() {
             header.addView(UiStyle.text(this, if (r.valid) "GEÇERLİ" else "GEÇERSİZ", 12f, if (r.valid) UiStyle.GREEN else UiStyle.AMBER, true))
             card.addView(header)
             val metrics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 2f; setPadding(0, UiStyle.dp(this@HistoryActivity, 12), 0, 0) }
-            metrics.addView(metric("SpO₂", r.spo2?.let { "$it%" } ?: "—", UiStyle.BLUE), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = UiStyle.dp(this@HistoryActivity, 6) })
-            metrics.addView(metric("Nabız", r.heartRate?.toString() ?: "—", UiStyle.RED, "bpm"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = UiStyle.dp(this@HistoryActivity, 6) })
+            metrics.addView(metric("SpO₂", spo2?.let { "$it%" } ?: "—", UiStyle.BLUE), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = UiStyle.dp(this@HistoryActivity, 6) })
+            metrics.addView(metric("Nabız", heartRate?.toString() ?: "—", UiStyle.RED, "bpm"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = UiStyle.dp(this@HistoryActivity, 6) })
             card.addView(metrics)
             card.addView(UiStyle.text(this, fmt.format(Date(r.timestampMs)), 13f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@HistoryActivity, 12), 0, 0) })
             root.addView(card, UiStyle.sectionParams(this, 10))
