@@ -33,7 +33,7 @@ class AlertDispatcher(private val context: Context) {
 
         val smsTargets = contacts.filter { it.smsEnabled }
         val smsResults = smsTargets.map { contact ->
-            val ok = sms.send(contact.phoneNumber, text, alert.timestampMs)
+            val ok = sms.send(contact.phoneNumber, text, alert.timestampMs, alertId)
             DeliveryLogStore.add(context, "SMS", mask(contact.phoneNumber), ok, if (ok) "modem gönderim kuyruğuna alındı; sonuç bekleniyor" else "kuyruğa alınamadı / izin yok")
             AlarmTimelineStore.add(context, "SMS", "${mask(contact.phoneNumber)} ${if (ok) "kuyruğa alındı" else "başlatılamadı"}")
             ok
