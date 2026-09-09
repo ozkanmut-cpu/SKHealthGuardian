@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.skhealth.guardian.shared.SmsRetryPolicy
 
 class SmsStatusReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -25,7 +26,8 @@ class SmsStatusReceiver : BroadcastReceiver() {
         DeliveryLogStore.add(context, "SMS", target, ok, detail)
         AlarmTimelineStore.add(context, "SMS SONUCU", "$target • $detail")
 
-        if (!ok && number != null && message != null && messageId != null && attempt < MAX_RETRIES) {
+        val delay = SmsRetryPolicy.nextDelayMs(attempt)
+        if (!ok && number != null && message != null && messageId != null && delay != null) {
             val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             val key = "scheduled_${messageId}_$attempt"
             if (!prefs.getBoolean(key, false)) {
@@ -43,7 +45,6 @@ class SmsStatusReceiver : BroadcastReceiver() {
                     retryIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-                val delay = if (attempt == 0) 30_000L else 90_000L
                 val alarm = context.getSystemService(AlarmManager::class.java)
                 alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pi)
                 DeliveryLogStore.add(context, "SMS RETRY", target, true, "${delay / 1000} sn sonra yeniden deneme planlandı")
@@ -61,6 +62,5 @@ class SmsStatusReceiver : BroadcastReceiver() {
         const val EXTRA_PART = "part"
         const val EXTRA_TOTAL = "total"
         private const val PREF = "sms_retry_state"
-        private const val MAX_RETRIES = 2
     }
 }
