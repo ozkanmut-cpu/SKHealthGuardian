@@ -38,9 +38,18 @@ class PhoneBridge(private val context: Context) {
         }
     }
 
+    fun sendAlarmAcknowledgement(alertId: String, alertTimestampMs: Long, reason: String) {
+        val safeReason = sanitizeReason(reason)
+        val seq = nextAckSequence()
+        sendAckPayload("v2|$seq|$alertId|$alertTimestampMs|$safeReason")
+    }
+
     fun sendAlarmAcknowledgement(alertTimestampMs: Long, reason: String) {
-        val safeReason = reason.replace('|', ' ').replace('\n', ' ').take(160)
-        val payload = "$alertTimestampMs|$safeReason"
+        sendAckPayload("$alertTimestampMs|${sanitizeReason(reason)}")
+    }
+
+    private fun sendAckPayload(payload: String) {
+        val order = PendingAckPolicy.order(payload)
         Wearable.getNodeClient(context).connectedNodes
             .addOnSuccessListener { nodes ->
                 if (nodes.isEmpty()) {
@@ -55,7 +64,7 @@ class PhoneBridge(private val context: Context) {
                         .addOnCompleteListener {
                             remaining--
                             if (remaining == 0) {
-                                if (allOk) clearPendingAckIfNotNewerThan(alertTimestampMs) else savePendingAck(payload)
+                                if (allOk) clearPendingAckIfNotNewerThan(order) else savePendingAck(payload)
                             }
                         }
                 }
@@ -83,10 +92,7 @@ class PhoneBridge(private val context: Context) {
         val ok = nodeIds.all { id ->
             runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }.isSuccess
         }
-        if (ok) {
-            val sentTs = payload.substringBefore('|').toLongOrNull() ?: Long.MIN_VALUE
-            clearPendingAckIfNotNewerThan(sentTs)
-        }
+        if (ok) clearPendingAckIfNotNewerThan(PendingAckPolicy.order(payload))
     }
 
     private fun encode(reading: HealthReading): String = listOf(
@@ -125,15 +131,26 @@ class PhoneBridge(private val context: Context) {
     }
 
     @Synchronized
-    private fun clearPendingAckIfNotNewerThan(sentTimestampMs: Long) {
+    private fun clearPendingAckIfNotNewerThan(sentOrder: Long) {
         val current = prefs.getString(KEY_PENDING_ACK, null) ?: return
-        val currentTs = current.substringBefore('|').toLongOrNull() ?: Long.MIN_VALUE
-        if (currentTs <= sentTimestampMs) prefs.edit().remove(KEY_PENDING_ACK).apply()
+        if (PendingAckPolicy.order(current) <= sentOrder) prefs.edit().remove(KEY_PENDING_ACK).apply()
     }
+
+    @Synchronized
+    private fun nextAckSequence(): Long {
+        val current = prefs.getLong(KEY_ACK_SEQUENCE, 0L)
+        val next = if (current == Long.MAX_VALUE) 1L else current + 1L
+        prefs.edit().putLong(KEY_ACK_SEQUENCE, next).commit()
+        return next
+    }
+
+    private fun sanitizeReason(reason: String): String =
+        reason.replace('|', ' ').replace('\n', ' ').take(160)
 
     companion object {
         private const val KEY_QUEUE = "pending_readings"
         private const val KEY_PENDING_ACK = "pending_alarm_ack"
+        private const val KEY_ACK_SEQUENCE = "alarm_ack_sequence"
         private const val MAX_QUEUE = 500
     }
 }
