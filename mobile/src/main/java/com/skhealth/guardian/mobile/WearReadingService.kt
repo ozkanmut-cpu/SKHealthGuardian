@@ -56,8 +56,7 @@ class WearReadingService : WearableListenerService() {
             else -> return
         }
 
-        if (HistoryStore.contains(this, reading.id)) return
-        HistoryStore.add(this, reading)
+        if (!HistoryStore.addIfAbsent(this, reading)) return
         MonitoringState.markReading(this, receivedAt)
         SpO2ReliabilityStore.onWatchReading(this, reading.id, reading.timestampMs, reading.spo2, reading.valid, reading.heartRate)
 
@@ -69,7 +68,6 @@ class WearReadingService : WearableListenerService() {
         val spo2Pc60 = SourcePriorityCoordinator.isPc60Spo2Authoritative(this, receivedAt)
         val hrPc60 = SourcePriorityCoordinator.isPc60HeartRateAuthoritative(this, receivedAt)
 
-        // Kaynak otoritesi değiştiğinde eski Watch doğrulama sayaçlarını taşımayız.
         if (lastSpo2Pc60 != null && (lastSpo2Pc60 != spo2Pc60 || lastHrPc60 != hrPc60)) {
             engine = null
             activeConfig = null
