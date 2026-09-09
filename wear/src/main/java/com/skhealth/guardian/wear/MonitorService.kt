@@ -25,6 +25,7 @@ class MonitorService : Service() {
     private lateinit var bridge: PhoneBridge
     private var activeConfig = AlarmConfig()
     private var engine = AlarmEngine(activeConfig)
+    private var engineSignature = ""
     private var lastValidReadingAt = 0L
     private var serviceStartedAt = 0L
     private var lastSensorFailureAlertAt = 0L
@@ -33,7 +34,10 @@ class MonitorService : Service() {
         super.onCreate()
         serviceStartedAt = System.currentTimeMillis()
         activeConfig = WearSettings.load(this)
-        engine = AlarmEngine(activeConfig)
+        engineSignature = WearAlarmEngineStateStore.signature(activeConfig)
+        engine = AlarmEngine(activeConfig).also { restoredEngine ->
+            WearAlarmEngineStateStore.load(this, engineSignature)?.let(restoredEngine::restore)
+        }
         sensor = SamsungSensorGateway(this)
         bridge = PhoneBridge(this)
         createChannel()
@@ -108,7 +112,9 @@ class MonitorService : Service() {
         val latest = WearSettings.load(this)
         if (latest != activeConfig) {
             activeConfig = latest
+            engineSignature = WearAlarmEngineStateStore.signature(activeConfig)
             engine = AlarmEngine(activeConfig)
+            WearAlarmEngineStateStore.save(this, engineSignature, engine.snapshot())
         }
 
         val wake = (getSystemService(POWER_SERVICE) as PowerManager)
@@ -198,6 +204,7 @@ class MonitorService : Service() {
         }
         runCatching { bridge.send(reading) }
         val alerts = engine.evaluate(reading)
+        WearAlarmEngineStateStore.save(this, engineSignature, engine.snapshot())
         if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
     }
 
