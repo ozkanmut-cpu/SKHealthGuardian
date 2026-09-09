@@ -37,13 +37,26 @@ class MainActivity : Activity() {
         val stale = edit("Veri gelmeme alarmı (dk)", (cfg.staleDataMs/60_000).toString())
         listOf(spo2Critical, spo2Low, hrHigh, stale).forEach(root::addView)
         root.addView(Button(this).apply { text = "Ayarları kaydet"; setOnClickListener {
-            AppSettings.save(this@MainActivity, AlarmConfig(
-                spo2CriticalImmediate = spo2Critical.text.toString().toIntOrNull() ?: 80,
-                spo2LowThreshold = spo2Low.text.toString().toIntOrNull() ?: 90,
-                heartRateHighThreshold = hrHigh.text.toString().toIntOrNull() ?: 130,
-                staleDataMs = (stale.text.toString().toLongOrNull() ?: 10) * 60_000L
-            ))
-            Toast.makeText(this@MainActivity, "Kaydedildi ve saate senkronlandı", Toast.LENGTH_SHORT).show()
+            val critical = spo2Critical.text.toString().toIntOrNull() ?: 80
+            val low = spo2Low.text.toString().toIntOrNull() ?: 90
+            val highHr = hrHigh.text.toString().toIntOrNull() ?: 130
+            val staleMinutes = stale.text.toString().toLongOrNull() ?: 10L
+
+            if (critical !in 50..99 || low !in 51..100 || critical >= low) {
+                return@setOnClickListener toast("SpO₂ eşiklerini kontrol et: kritik değer düşük eşikten küçük olmalı")
+            }
+            if (highHr !in 60..240) return@setOnClickListener toast("Yüksek nabız eşiği 60–240 arasında olmalı")
+            if (staleMinutes !in 5..120) return@setOnClickListener toast("Veri gelmeme süresi 5–120 dk arasında olmalı")
+
+            val newConfig = AlarmConfig(
+                spo2CriticalImmediate = critical,
+                spo2LowThreshold = low,
+                heartRateHighThreshold = highHr,
+                staleDataMs = staleMinutes * 60_000L
+            )
+            AppSettings.save(this@MainActivity, newConfig)
+            WatchCommandSender(this@MainActivity).sendConfig(newConfig)
+            Toast.makeText(this@MainActivity, "Kaydedildi; saat senkron komutu gönderildi", Toast.LENGTH_SHORT).show()
         }})
         root.addView(Button(this).apply { text = "Kişi / telefon tanımla"; setOnClickListener { startActivity(Intent(this@MainActivity, ContactsActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Gerçek SMS testi"; setOnClickListener { testSms() } })
@@ -58,8 +71,8 @@ class MainActivity : Activity() {
     private fun testSms() {
         val c = ContactStore.contacts(this).firstOrNull { it.smsEnabled } ?: return toast("SMS kişisi tanımlı değil")
         val ok = SmsSender(this).send(c.phoneNumber, "SK Health Guardian TEST SMS - sistem zinciri testidir.")
-        DeliveryLogStore.add(this, "SMS TEST", "***${c.phoneNumber.takeLast(4)}", ok, if (ok) "test gönderim isteği kabul edildi" else "test gönderilemedi / izin yok")
-        toast(if (ok) "SMS gönderildi" else "SMS gönderilemedi / izin yok")
+        DeliveryLogStore.add(this, "SMS TEST", "***${c.phoneNumber.takeLast(4)}", ok, if (ok) "test SMS modem kuyruğuna alındı; sonuç bekleniyor" else "test SMS kuyruğa alınamadı / izin yok")
+        toast(if (ok) "SMS kuyruğa alındı; gerçek sonuç kayıt ekranına düşecek" else "SMS kuyruğa alınamadı / izin yok")
     }
 
     private fun testCall() {
