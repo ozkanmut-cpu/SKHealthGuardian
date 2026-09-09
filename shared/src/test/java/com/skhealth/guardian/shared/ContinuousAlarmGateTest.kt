@@ -14,29 +14,42 @@ class ContinuousAlarmGateTest {
     )
 
     @Test
-    fun criticalSpo2PassesImmediately() {
+    fun criticalSpo2DoesNotAlarmImmediatelyOnPc60() {
         val gate = ContinuousAlarmGate(config)
-        val out = gate.select(HealthReading(timestampMs = 1_000L, spo2 = 79, source = "pc60fw"))
+        assertTrue(gate.select(HealthReading(timestampMs = 0L, spo2 = 79, source = "pc60fw")).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 119_999L, spo2 = 79, source = "pc60fw")).isEmpty())
+        val out = gate.select(HealthReading(timestampMs = 120_000L, spo2 = 79, source = "pc60fw"))
         assertEquals(1, out.size)
         assertEquals(79, out.single().spo2)
     }
 
     @Test
-    fun lowSpo2SecondEvaluationWaitsTwoMinutes() {
+    fun lowSpo2At85AlarmsOnlyAfterTwoMinutes() {
         val gate = ContinuousAlarmGate(config)
-        assertEquals(1, gate.select(HealthReading(timestampMs = 0L, spo2 = 85)).size)
+        assertTrue(gate.select(HealthReading(timestampMs = 0L, spo2 = 85)).isEmpty())
         assertTrue(gate.select(HealthReading(timestampMs = 1_000L, spo2 = 85)).isEmpty())
         assertTrue(gate.select(HealthReading(timestampMs = 119_999L, spo2 = 85)).isEmpty())
-        assertEquals(1, gate.select(HealthReading(timestampMs = 120_000L, spo2 = 85)).size)
+        assertEquals(2, gate.select(HealthReading(timestampMs = 120_000L, spo2 = 85)).size)
     }
 
     @Test
-    fun normalSpo2CancelsPendingConfirmation() {
+    fun stableRecoveryAbove85CancelsPendingAlarm() {
         val gate = ContinuousAlarmGate(config)
-        assertEquals(1, gate.select(HealthReading(timestampMs = 0L, spo2 = 85)).size)
-        assertEquals(1, gate.select(HealthReading(timestampMs = 30_000L, spo2 = 95)).size)
-        assertEquals(1, gate.select(HealthReading(timestampMs = 40_000L, spo2 = 85)).size)
-        assertTrue(gate.select(HealthReading(timestampMs = 120_000L, spo2 = 85)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 0L, spo2 = 79)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 60_000L, spo2 = 86)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 69_999L, spo2 = 86)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 70_000L, spo2 = 86)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 130_000L, spo2 = 79)).isEmpty())
+    }
+
+    @Test
+    fun briefRecoveryAbove85DoesNotCancelPendingAlarm() {
+        val gate = ContinuousAlarmGate(config)
+        assertTrue(gate.select(HealthReading(timestampMs = 0L, spo2 = 79)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 60_000L, spo2 = 86)).isEmpty())
+        assertTrue(gate.select(HealthReading(timestampMs = 65_000L, spo2 = 84)).isEmpty())
+        val out = gate.select(HealthReading(timestampMs = 120_000L, spo2 = 84))
+        assertEquals(2, out.size)
     }
 
     @Test
