@@ -30,6 +30,7 @@ object QaChaosRunner {
         val violations = mutableListOf<String>()
         val seenReadingIds = HashSet<String>()
         val sensorGate = MonotonicTimestampGate()
+        val alertHistory = ArrayList<Long>()
 
         var ackWatermark = 0L
         var latestAlertTs = 0L
@@ -67,26 +68,32 @@ object QaChaosRunner {
                 3 -> {
                     nextAlertTs += random.nextLong(1L, 10L)
                     latestAlertTs = nextAlertTs
+                    alertHistory += latestAlertTs
                     if (!RemoteDeliveryGate.shouldDeliver(ackWatermark, latestAlertTs)) {
-                        violations += "newer alert suppressed by older ACK at op=$index"
+                        violations += "newer alert suppressed by older ACK at op=$index alert=$latestAlertTs ack=$ackWatermark"
                     }
                 }
 
                 4 -> {
-                    // ACK can only refer to an alarm that has actually existed. Delayed/replayed ACKs
-                    // may target the latest or an older alert, but never a future timestamp.
-                    val candidate = when {
-                        latestAlertTs == 0L -> 0L
-                        random.nextBoolean() -> latestAlertTs
-                        else -> random.nextLong(0L, latestAlertTs + 1L)
+                    // ACKs can only identify alarms that were actually emitted. Selecting from the
+                    // real alert history models delayed/replayed acknowledgements without inventing
+                    // timestamps that never belonged to an alarm.
+                    if (alertHistory.isNotEmpty()) {
+                        val candidate = if (random.nextBoolean()) {
+                            latestAlertTs
+                        } else {
+                            alertHistory[random.nextInt(alertHistory.size)]
+                        }
+                        ackWatermark = maxOf(ackWatermark, candidate)
                     }
-                    ackWatermark = maxOf(ackWatermark, candidate)
                 }
 
                 5, 6 -> {
+                    // Retry/escalation/call-failover also belongs to a real alarm identity. Most
+                    // traffic targets the latest alarm; some deliberately replays an older alarm.
                     val targetAlert = when {
-                        latestAlertTs == 0L -> 0L
-                        random.nextInt(4) == 0 -> (latestAlertTs - random.nextLong(0L, 50L)).coerceAtLeast(1L)
+                        alertHistory.isEmpty() -> 0L
+                        random.nextInt(4) == 0 -> alertHistory[random.nextInt(alertHistory.size)]
                         else -> latestAlertTs
                     }
                     val allowed = RemoteDeliveryGate.shouldDeliver(ackWatermark, targetAlert)
@@ -97,7 +104,7 @@ object QaChaosRunner {
                     if (allowed) {
                         remoteAllowed++
                         if (targetAlert > 0L && ackWatermark >= targetAlert) {
-                            violations += "remote action allowed after ACK at op=$index"
+                            violations += "remote action allowed after ACK at op=$index alert=$targetAlert ack=$ackWatermark"
                         }
                     } else {
                         remoteSuppressed++
