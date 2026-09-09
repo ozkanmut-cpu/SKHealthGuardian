@@ -114,6 +114,28 @@ object SpO2ReliabilityStore {
         }.toList()
     }
 
+    fun restore(context: Context, matches: List<Match>) {
+        val valid = matches.filter { it.timestampMs > 0L && it.watch in 1..100 && it.pc60 in 1..100 }
+            .map { it.copy(diff = it.watch - it.pc60) }
+            .takeLast(RECENT_LIMIT)
+        val count = valid.size
+        val sumAbs = valid.sumOf { abs(it.diff) }
+        val sumSigned = valid.sumOf { it.diff }
+        val last = valid.lastOrNull()
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .remove("watch_id").remove("matched_watch_id").remove("watch_ts").remove("watch_spo2")
+            .remove("pc_ts").remove("pc_spo2")
+            .putInt("count", count)
+            .putInt("sum_abs", sumAbs)
+            .putInt("sum_signed", sumSigned)
+            .putLong("last_match_ts", last?.timestampMs ?: 0L)
+            .putInt("last_watch", last?.watch ?: -1)
+            .putInt("last_pc", last?.pc60 ?: -1)
+            .putInt("last_diff", last?.diff ?: Int.MIN_VALUE)
+            .putString("recent_matches", encode(valid))
+            .apply()
+    }
+
     private fun encode(items: List<Match>): String =
         items.joinToString("\n") { "${it.timestampMs},${it.watch},${it.pc60},${it.diff}" }
 
