@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.*
 import androidx.core.app.ActivityCompat
@@ -21,8 +22,19 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestPermissions()
-        ContextCompat.startForegroundService(this, Intent(this, WatchdogService::class.java))
+        startWatchdogIfReady()
         render()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_PERMISSIONS) startWatchdogIfReady()
+    }
+
+    private fun startWatchdogIfReady() {
+        val bluetoothReady = Build.VERSION.SDK_INT < 31 || has(Manifest.permission.BLUETOOTH_CONNECT)
+        if (!bluetoothReady) return
+        runCatching { ContextCompat.startForegroundService(this, Intent(this, WatchdogService::class.java)) }
     }
 
     private fun render() {
@@ -105,9 +117,13 @@ class MainActivity : Activity() {
     private fun requestPermissions() {
         val wanted = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
         val missing = wanted.filterNot { has(it) }
-        if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), 10)
+        if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMISSIONS)
     }
 
     private fun has(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
+
+    companion object {
+        private const val REQ_PERMISSIONS = 10
+    }
 }
