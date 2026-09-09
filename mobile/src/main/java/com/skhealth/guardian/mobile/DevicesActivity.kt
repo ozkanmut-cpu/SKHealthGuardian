@@ -49,7 +49,7 @@ class DevicesActivity : Activity() {
             connected = pcConnected,
             rows = listOf(
                 "Durum" to if (pcConnected) "Bağlı" else "Bağlı değil",
-                "Pil seviyesi" to pc.battery?.let { "%$it" } ?: "—",
+                "Pil seviyesi" to pc.batteryLevel?.let { "%$it" } ?: "—",
                 "Son veri" to if (pc.lastPacketAt > 0) ageText((now - pc.lastPacketAt).coerceAtLeast(0L)) else "—"
             ),
             action = { startActivity(Intent(this, Pc60Activity::class.java)) }
