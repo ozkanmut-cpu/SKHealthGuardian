@@ -57,7 +57,6 @@ class MonitorService : Service() {
                 process(HealthReading(System.currentTimeMillis(), valid = false))
             }
 
-            // Keep trackers sequential: HR listener is removed before SpO2 starts.
             val spo2 = measureSpO2WithRetry()
             if (spo2 != null) {
                 process(HealthReading(System.currentTimeMillis(), spo2 = spo2))
@@ -83,12 +82,6 @@ class MonitorService : Service() {
         return null
     }
 
-    /**
-     * Normal HR sampling stays at 5 minutes. A high valid sample is treated as a
-     * trigger: confirm after 2 minutes instead of waiting for the next 5-minute cycle.
-     * If that confirmation cannot be measured, make one final attempt 1 minute later.
-     * A normal confirmation resets AlarmEngine's consecutive-high counter.
-     */
     private suspend fun confirmHighHeartRate() {
         delay(2 * 60_000L)
         val second = runCatching { sensor.measureHeartRate() }.getOrNull()
@@ -96,24 +89,16 @@ class MonitorService : Service() {
             process(HealthReading(System.currentTimeMillis(), heartRate = second))
             return
         }
-
         runCatching { sensor.reconnect() }
         delay(60_000L)
         val third = runCatching { sensor.measureHeartRate() }.getOrNull()
-        if (third != null) {
-            process(HealthReading(System.currentTimeMillis(), heartRate = third))
-        } else {
+        if (third != null) process(HealthReading(System.currentTimeMillis(), heartRate = third))
+        else {
             runCatching { sensor.reconnect() }
             process(HealthReading(System.currentTimeMillis(), valid = false))
         }
     }
 
-    /**
-     * SpO2 below the normal threshold but not in the immediate critical range
-     * is confirmed after 2 minutes. If that confirmation cannot be measured,
-     * retry once 1 minute later. Values below the critical threshold are never
-     * delayed by this method; AlarmEngine raises those immediately.
-     */
     private suspend fun confirmLowSpO2() {
         delay(2 * 60_000L)
         val second = runCatching { sensor.measureSpO2() }.getOrNull()
@@ -121,13 +106,11 @@ class MonitorService : Service() {
             process(HealthReading(System.currentTimeMillis(), spo2 = second))
             return
         }
-
         runCatching { sensor.reconnect() }
         delay(60_000L)
         val third = runCatching { sensor.measureSpO2() }.getOrNull()
-        if (third != null) {
-            process(HealthReading(System.currentTimeMillis(), spo2 = third))
-        } else {
+        if (third != null) process(HealthReading(System.currentTimeMillis(), spo2 = third))
+        else {
             runCatching { sensor.reconnect() }
             process(HealthReading(System.currentTimeMillis(), valid = false))
         }
@@ -150,12 +133,20 @@ class MonitorService : Service() {
         if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_MEASURE_NOW) scope.launch { measureCycle() }
+        return START_STICKY
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
 
     private fun createChannel() {
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
             .createNotificationChannel(NotificationChannel("monitor", "Health monitoring", NotificationManager.IMPORTANCE_LOW))
+    }
+
+    companion object {
+        const val ACTION_MEASURE_NOW = "com.skhealth.guardian.wear.MEASURE_NOW"
     }
 }
