@@ -16,16 +16,19 @@ object LocalAlarm {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Kritik sağlık alarmları", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Doğrulanmış SpO₂ ve nabız alarmları"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 700, 300, 700, 300, 1200)
         })
         nm.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("⚠ SAĞLIK ALARMI")
             .setContentText(alert.message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("${alert.message}\n\nTelefon da bilgilendiriliyor. Ölçümü kontrol et."))
+            .setStyle(NotificationCompat.BigTextStyle().bigText("${alert.message}\n\nÖlçümü kontrol et. Telefona da iletilmeye çalışılıyor."))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
+            .setAutoCancel(false)
             .build())
         (context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
             .vibrate(VibrationEffect.createWaveform(longArrayOf(0, 700, 300, 700, 300, 1200), 1))
