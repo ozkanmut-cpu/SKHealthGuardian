@@ -6,7 +6,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
- data class AndroidStressResult(
+data class AndroidStressResult(
     val id: String,
     val title: String,
     val passed: Boolean,
@@ -34,6 +34,7 @@ object AndroidStressRunner {
                 historyWriteReadTrim(context, 2_500 * scale),
                 timelineWriteReadTrim(context, 1_500 * scale),
                 duplicateLookupStorm(context, 10_000 * scale),
+                concurrentDuplicateInsertStorm(context, 8, 2_000 * scale),
                 concurrentHistoryReaders(context, 8, 2_000 * scale),
                 prefsReplayStorm(context, 20_000 * scale)
             )
@@ -95,6 +96,50 @@ object AndroidStressRunner {
                 var miss = 0
                 repeat(n) { i -> if (!HistoryStore.contains(context, "dup-${i % 1000}")) miss++ }
                 Check(miss == 0, "lookup miss=$miss")
+            }
+        } finally {
+            HistoryStore.replace(context, backup)
+        }
+    }
+
+    private fun concurrentDuplicateInsertStorm(context: Context, workers: Int, perWorker: Int): AndroidStressResult {
+        val backup = HistoryStore.recent(context, 1000)
+        val ops = workers * perWorker
+        return try {
+            HistoryStore.replace(context, emptyList())
+            timed("duplicate-insert", "8 paralel replay/insert fırtınası", ops) {
+                val executor = Executors.newFixedThreadPool(workers)
+                try {
+                    val jobs = (0 until workers).map { worker ->
+                        Callable {
+                            var accepted = 0
+                            repeat(perWorker) { i ->
+                                val id = "replay-${i % 500}"
+                                val stored = HistoryStore.addIfAbsent(
+                                    context,
+                                    HealthReading(
+                                        id = id,
+                                        timestampMs = 5_000_000L + i + worker,
+                                        spo2 = 97,
+                                        heartRate = 78,
+                                        source = "stress-replay"
+                                    )
+                                )
+                                if (stored) accepted++
+                            }
+                            accepted
+                        }
+                    }
+                    val accepted = executor.invokeAll(jobs).sumOf { it.get(30, TimeUnit.SECONDS) }
+                    val rows = HistoryStore.recent(context, 1000)
+                    val uniqueIds = rows.map { it.id }.toSet()
+                    Check(
+                        accepted == 500 && rows.size == 500 && uniqueIds.size == 500,
+                        "accepted=$accepted rows=${rows.size} unique=${uniqueIds.size}"
+                    )
+                } finally {
+                    executor.shutdownNow()
+                }
             }
         } finally {
             HistoryStore.replace(context, backup)
