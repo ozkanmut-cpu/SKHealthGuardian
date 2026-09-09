@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.os.Bundle
@@ -68,7 +69,7 @@ class SpO2ReliabilityActivity : Activity() {
         })
 
         root.addView(TextView(this).apply { text = "Fark grafiği (Saat - PC-60FW)"; textSize = 20f })
-        root.addView(ReliabilityChartView(matches).apply {
+        root.addView(ReliabilityChartView(this, matches).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 420)
         })
 
@@ -100,9 +101,10 @@ class SpO2ReliabilityActivity : Activity() {
         })
     }
 
-    private class ReliabilityChartView(private val data: List<SpO2ReliabilityStore.Match>) : View(null) {
-        constructor(context: android.content.Context, data: List<SpO2ReliabilityStore.Match>) : this(data) { }
-
+    private class ReliabilityChartView(
+        context: Context,
+        private val data: List<SpO2ReliabilityStore.Match>
+    ) : View(context) {
         private val axis = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 2f }
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 4f; style = Paint.Style.STROKE }
         private val point = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
