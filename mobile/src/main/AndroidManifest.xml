@@ -18,6 +18,7 @@
         <activity android:name=".ExportActivity" android:exported="false" />
         <activity android:name=".AlarmTimelineActivity" android:exported="false" />
         <activity android:name=".SystemHealthActivity" android:exported="false" />
+        <activity android:name=".SpO2ReliabilityActivity" android:exported="false" />
         <activity android:name=".DeliveryLogActivity" android:exported="false" />
         <activity android:name=".HistoryChartActivity" android:exported="false" />
         <activity android:name=".HistoryActivity" android:exported="false" />
