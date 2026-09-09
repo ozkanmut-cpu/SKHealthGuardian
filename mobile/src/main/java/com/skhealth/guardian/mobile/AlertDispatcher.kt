@@ -26,11 +26,22 @@ class AlertDispatcher(private val context: Context) {
         val text = "KRİTİK SAĞLIK UYARISI\n${alert.message}\nSaat: $time$history"
 
         val smsTargets = contacts.filter { it.smsEnabled }
-        val smsOk = smsTargets.map { sms.send(it.phoneNumber, text) }.all { it }
+        val smsResults = smsTargets.map { contact ->
+            val ok = sms.send(contact.phoneNumber, text)
+            DeliveryLogStore.add(context, "SMS", mask(contact.phoneNumber), ok, if (ok) "gönderim isteği kabul edildi" else "gönderim başarısız / izin yok")
+            ok
+        }
+        val smsOk = smsResults.isNotEmpty() && smsResults.all { it }
+
         val callTarget = contacts.firstOrNull { it.callEnabled }
-        val callOk = callTarget?.let { caller.call(it.phoneNumber) } ?: false
+        val callOk = callTarget?.let {
+            val ok = caller.call(it.phoneNumber)
+            DeliveryLogStore.add(context, "ARAMA", mask(it.phoneNumber), ok, if (ok) "arama başlatıldı" else "arama başlatılamadı / izin yok")
+            ok
+        } ?: false
+
         val remoteStatus = buildString {
-            append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsOk) "SMS gönderildi" else "SMS gönderilemedi")
+            append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsOk) "SMS gönderim isteği kabul edildi" else "SMS gönderilemedi")
             append(" • ")
             append(if (callTarget == null) "Arama kişisi yok" else if (callOk) "Arama başlatıldı" else "Arama başlatılamadı")
         }
@@ -58,5 +69,10 @@ class AlertDispatcher(private val context: Context) {
             .setFullScreenIntent(pi, true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true).build())
+    }
+
+    private fun mask(number: String): String {
+        val clean = number.trim()
+        return if (clean.length <= 4) "****" else "***${clean.takeLast(4)}"
     }
 }
