@@ -7,6 +7,8 @@ import android.content.Intent
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.skhealth.guardian.shared.AlertEvent
+import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.AlarmConfig
 import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.HealthReading
@@ -22,9 +24,13 @@ class MonitorService : Service() {
     private lateinit var bridge: PhoneBridge
     private var activeConfig = AlarmConfig()
     private var engine = AlarmEngine(activeConfig)
+    private var lastValidReadingAt = 0L
+    private var serviceStartedAt = 0L
+    private var lastSensorFailureAlertAt = 0L
 
     override fun onCreate() {
         super.onCreate()
+        serviceStartedAt = System.currentTimeMillis()
         activeConfig = WearSettings.load(this)
         engine = AlarmEngine(activeConfig)
         sensor = SamsungSensorGateway(this)
@@ -36,6 +42,7 @@ class MonitorService : Service() {
             .setContentText("SpO₂ ve nabız 5 dakikada bir ölçülüyor")
             .setOngoing(true).build())
         startMonitoring()
+        startSensorWatchdog()
     }
 
     private fun startMonitoring() {
@@ -46,6 +53,34 @@ class MonitorService : Service() {
                 val next = ((now / INTERVAL_MS) + 1L) * INTERVAL_MS
                 delay((next - now).coerceAtLeast(0L))
                 safeMeasureCycle()
+            }
+        }
+    }
+
+    private fun startSensorWatchdog() {
+        scope.launch {
+            while (isActive) {
+                delay(60_000L)
+                val now = System.currentTimeMillis()
+                val reference = if (lastValidReadingAt > 0) lastValidReadingAt else serviceStartedAt
+                val timeout = maxOf(activeConfig.staleDataMs, MIN_SENSOR_STALE_MS)
+                if (now - reference > timeout) {
+                    runCatching { sensor.reconnect() }
+                    safeMeasureCycle()
+                    val recoveredReference = if (lastValidReadingAt > 0) lastValidReadingAt else serviceStartedAt
+                    if (System.currentTimeMillis() - recoveredReference > timeout && now - lastSensorFailureAlertAt > timeout) {
+                        lastSensorFailureAlertAt = now
+                        LocalAlarm.raise(
+                            this@MonitorService,
+                            AlertEvent(
+                                AlertType.SENSOR_FAILURE,
+                                now,
+                                null,
+                                "Saat sensörü uzun süredir geçerli ölçüm üretemiyor"
+                            )
+                        )
+                    }
+                }
             }
         }
     }
@@ -140,6 +175,9 @@ class MonitorService : Service() {
     }
 
     private suspend fun process(reading: HealthReading) {
+        if (reading.valid && (reading.spo2 != null || reading.heartRate != null)) {
+            lastValidReadingAt = reading.timestampMs
+        }
         runCatching { bridge.send(reading) }
         val alerts = engine.evaluate(reading)
         if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
@@ -161,5 +199,6 @@ class MonitorService : Service() {
     companion object {
         const val ACTION_MEASURE_NOW = "com.skhealth.guardian.wear.MEASURE_NOW"
         private const val INTERVAL_MS = 5 * 60_000L
+        private const val MIN_SENSOR_STALE_MS = 10 * 60_000L
     }
 }
