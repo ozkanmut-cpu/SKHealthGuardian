@@ -8,6 +8,8 @@ import com.skhealth.guardian.shared.HealthReading
 class WearReadingService : WearableListenerService() {
     private var engine: AlarmEngine? = null
     private var activeConfig: com.skhealth.guardian.shared.AlarmConfig? = null
+    private var lastSpo2Pc60: Boolean? = null
+    private var lastHrPc60: Boolean? = null
 
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path == "/health/status") {
@@ -54,23 +56,38 @@ class WearReadingService : WearableListenerService() {
         val ageMs = (receivedAt - reading.timestampMs).coerceAtLeast(0L)
         if (ageMs > maxLiveAgeMs) return
 
-        // PC-60FW geçerli ve taze veri üretiyorsa hem SpO₂ hem nabız için ana alarm kaynağı odur.
-        // Saat ölçümü geçmişe ve güvenilirlik karşılaştırmasına kaydedilir fakat alarm motorunu tetiklemez.
-        if (SourcePriorityCoordinator.isPc60Authoritative(this, receivedAt)) {
-            AlarmTimelineStore.add(
-                this,
-                "KAYNAK ÖNCELİĞİ",
-                "Watch ölçümü karşılaştırma için kaydedildi; SpO₂ ve nabız alarm kararı PC-60FW'ye bırakıldı"
-            )
-            return
+        val spo2Pc60 = SourcePriorityCoordinator.isPc60Spo2Authoritative(this, receivedAt)
+        val hrPc60 = SourcePriorityCoordinator.isPc60HeartRateAuthoritative(this, receivedAt)
+
+        // Kaynak otoritesi değiştiğinde eski Watch doğrulama sayaçlarını taşımayız.
+        if (lastSpo2Pc60 != null && (lastSpo2Pc60 != spo2Pc60 || lastHrPc60 != hrPc60)) {
+            engine = null
+            activeConfig = null
         }
+        lastSpo2Pc60 = spo2Pc60
+        lastHrPc60 = hrPc60
+
+        if (spo2Pc60 || hrPc60) {
+            val detail = when {
+                spo2Pc60 && hrPc60 -> "Watch ölçümü kaydedildi; SpO₂ ve nabız alarm kararı PC-60FW'ye bırakıldı"
+                spo2Pc60 -> "Watch ölçümü kaydedildi; SpO₂ alarm kararı PC-60FW'de, nabız Galaxy Watch'ta"
+                else -> "Watch ölçümü kaydedildi; nabız alarm kararı PC-60FW'de, SpO₂ Galaxy Watch'ta"
+            }
+            AlarmTimelineStore.add(this, "KAYNAK ÖNCELİĞİ", detail)
+        }
+
+        val alarmReading = reading.copy(
+            spo2 = if (spo2Pc60) null else reading.spo2,
+            heartRate = if (hrPc60) null else reading.heartRate
+        )
+        if (alarmReading.spo2 == null && alarmReading.heartRate == null) return
 
         val e = if (engine == null || activeConfig != cfg) {
             activeConfig = cfg
             AlarmEngine(cfg).also { engine = it }
         } else engine!!
         val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
-        e.evaluate(reading).forEach { AlertDispatcher(this).dispatch(it, recent, reading) }
+        e.evaluate(alarmReading).forEach { AlertDispatcher(this).dispatch(it, recent, alarmReading) }
     }
 
     companion object {
