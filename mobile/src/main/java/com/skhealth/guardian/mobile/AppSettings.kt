@@ -54,6 +54,9 @@ object AppSettings {
     fun watchRetry2Seconds(context: Context): Int = prefs(context).getInt("watch_retry2_seconds", 60)
     fun setWatchRetry2Seconds(context: Context, value: Int) = edit(context).putInt("watch_retry2_seconds", value.coerceIn(5, 600)).apply()
 
+    fun watchHeartbeatTimeoutMinutes(context: Context): Int = prefs(context).getInt("watch_heartbeat_timeout_minutes", 3)
+    fun setWatchHeartbeatTimeoutMinutes(context: Context, value: Int) = edit(context).putInt("watch_heartbeat_timeout_minutes", value.coerceIn(2, 30)).apply()
+
     fun pc60AlarmThreshold(context: Context): Int = prefs(context).getInt("pc60_alarm_threshold", 85)
     fun setPc60AlarmThreshold(context: Context, value: Int) = edit(context).putInt("pc60_alarm_threshold", value.coerceIn(50, 99)).apply()
 
