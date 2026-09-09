@@ -21,12 +21,16 @@ class ExportActivity : Activity() {
         }
         root.addView(TextView(this).apply { text = "Yedekle / dışa aktar"; textSize = 24f })
         root.addView(TextView(this).apply {
-            text = "CSV yalnız ölçüm geçmişini; JSON ise ayarlar, kişiler, ölçümler, alarm timeline ve teslimat kayıtlarını içerir. JSON dosyasında telefon numaraları açık metin olarak yer alır; güvenli yerde sakla."
+            text = "Ölçüm CSV'si ölçüm geçmişini, doğrulama CSV'si Watch↔PC-60FW eşleşmelerini; JSON ise ayarlar, kişiler, ölçümler, alarm timeline, teslimat kayıtları ve saat doğrulama verilerini içerir. JSON dosyasında telefon numaraları açık metin olarak yer alır; güvenli yerde sakla."
             setPadding(0, 16, 0, 16)
         })
         root.addView(Button(this).apply {
             text = "Ölçüm geçmişini CSV dışa aktar"
             setOnClickListener { createDocument("text/csv", "SKHealthGuardian_measurements.csv", "csv") }
+        })
+        root.addView(Button(this).apply {
+            text = "Saat doğrulama verisini CSV dışa aktar"
+            setOnClickListener { createDocument("text/csv", "SKHealthGuardian_watch_pc60_reliability.csv", "reliability_csv") }
         })
         root.addView(Button(this).apply {
             text = "Tam JSON yedeği oluştur"
@@ -49,12 +53,21 @@ class ExportActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQ_CREATE || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        val content = if (pending == "csv") buildCsv() else buildJson().toString(2)
+        val content = when (pending) {
+            "csv" -> buildCsv()
+            "reliability_csv" -> buildReliabilityCsv()
+            else -> buildJson().toString(2)
+        }
         runCatching {
             contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(content) }
         }.onSuccess {
             Toast.makeText(this, "Dışa aktarma tamamlandı", Toast.LENGTH_LONG).show()
-            AlarmTimelineStore.add(this, "DIŞA AKTARMA", if (pending == "csv") "Ölçüm CSV oluşturuldu" else "Tam JSON yedeği oluşturuldu")
+            val detail = when (pending) {
+                "csv" -> "Ölçüm CSV oluşturuldu"
+                "reliability_csv" -> "Watch-PC60 doğrulama CSV oluşturuldu"
+                else -> "Tam JSON yedeği oluşturuldu"
+            }
+            AlarmTimelineStore.add(this, "DIŞA AKTARMA", detail)
         }.onFailure {
             Toast.makeText(this, "Dışa aktarma başarısız: ${it.javaClass.simpleName}", Toast.LENGTH_LONG).show()
         }
@@ -71,6 +84,19 @@ class ExportActivity : Activity() {
                 append(r.heartRate ?: "").append(',')
                 append(r.valid).append(',')
                 append(csv(r.source)).append('\n')
+            }
+        }
+    }
+
+    private fun buildReliabilityCsv(): String {
+        val rows = SpO2ReliabilityStore.recentMatches(this)
+        return buildString {
+            appendLine("timestamp_ms,watch_spo2,pc60_spo2,diff_watch_minus_pc60")
+            rows.forEach { m ->
+                append(m.timestampMs).append(',')
+                append(m.watch).append(',')
+                append(m.pc60).append(',')
+                append(m.diff).append('\n')
             }
         }
     }
@@ -106,14 +132,36 @@ class ExportActivity : Activity() {
                 .put("source", r.source))
         }
 
+        val reliability = SpO2ReliabilityStore.summary(this)
+        val reliabilitySummary = JSONObject()
+            .put("label", reliability.label)
+            .put("count", reliability.count)
+            .put("meanAbsoluteError", reliability.meanAbsoluteError ?: JSONObject.NULL)
+            .put("meanBias", reliability.meanBias ?: JSONObject.NULL)
+            .put("lastWatch", reliability.lastWatch ?: JSONObject.NULL)
+            .put("lastPc60", reliability.lastPc60 ?: JSONObject.NULL)
+            .put("lastDiff", reliability.lastDiff ?: JSONObject.NULL)
+            .put("lastMatchAt", reliability.lastMatchAt ?: JSONObject.NULL)
+
+        val reliabilityMatches = JSONArray()
+        SpO2ReliabilityStore.recentMatches(this).forEach { m ->
+            reliabilityMatches.put(JSONObject()
+                .put("timestampMs", m.timestampMs)
+                .put("watchSpO2", m.watch)
+                .put("pc60SpO2", m.pc60)
+                .put("diffWatchMinusPc60", m.diff))
+        }
+
         return JSONObject()
-            .put("schemaVersion", 1)
+            .put("schemaVersion", 2)
             .put("exportedAtMs", System.currentTimeMillis())
             .put("settings", settings)
             .put("contacts", contacts)
             .put("readings", readings)
             .put("alarmTimeline", AlarmTimelineStore.formatted(this, 500))
             .put("deliveryLog", DeliveryLogStore.formatted(this))
+            .put("reliabilitySummary", reliabilitySummary)
+            .put("reliabilityMatches", reliabilityMatches)
     }
 
     private fun csv(value: String): String = "\"${value.replace("\"", "\"\"")}\""
