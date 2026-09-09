@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.health.connect.HealthPermissions
 import android.os.Build
 import android.os.Bundle
 import android.widget.Button
@@ -52,10 +51,7 @@ class WatchSetupActivity : Activity() {
     }
 
     private fun requestSensorPermissions() {
-        val permissions = mutableListOf(
-            HealthPermissions.READ_HEART_RATE,
-            HealthPermissions.READ_OXYGEN_SATURATION
-        )
+        val permissions = mutableListOf(PERM_READ_HEART_RATE, PERM_READ_OXYGEN_SATURATION)
         if (Build.VERSION.SDK_INT >= 33) permissions += Manifest.permission.POST_NOTIFICATIONS
         val missing = permissions.filterNot(::has)
         if (missing.isEmpty()) requestBackgroundPermission()
@@ -63,12 +59,8 @@ class WatchSetupActivity : Activity() {
     }
 
     private fun requestBackgroundPermission() {
-        if (Build.VERSION.SDK_INT >= 36 && !has(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND)) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND),
-                REQ_BACKGROUND
-            )
+        if (Build.VERSION.SDK_INT >= 36 && !has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)) {
+            ActivityCompat.requestPermissions(this, arrayOf(PERM_READ_HEALTH_DATA_IN_BACKGROUND), REQ_BACKGROUND)
         } else {
             startMonitoringIfReady()
         }
@@ -85,15 +77,16 @@ class WatchSetupActivity : Activity() {
     private fun startMonitoringIfReady() {
         refreshStatus()
         if (!hasSensorPermissions()) return
-        if (Build.VERSION.SDK_INT >= 36 && !has(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND)) return
-        ContextCompat.startForegroundService(this, Intent(this, MonitorService::class.java))
-        status.append("\n✓ İzleme servisi başlatıldı")
+        if (Build.VERSION.SDK_INT >= 36 && !has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)) return
+        runCatching { ContextCompat.startForegroundService(this, Intent(this, MonitorService::class.java)) }
+            .onSuccess { status.append("\n✓ İzleme servisi başlatıldı") }
+            .onFailure { status.append("\n✗ İzleme servisi başlatılamadı") }
     }
 
     private fun refreshStatus() {
-        val hr = has(HealthPermissions.READ_HEART_RATE)
-        val spo2 = has(HealthPermissions.READ_OXYGEN_SATURATION)
-        val background = Build.VERSION.SDK_INT < 36 || has(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND)
+        val hr = has(PERM_READ_HEART_RATE)
+        val spo2 = has(PERM_READ_OXYGEN_SATURATION)
+        val background = Build.VERSION.SDK_INT < 36 || has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)
         val notifications = Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS)
         status.text = buildString {
             append(if (hr) "✓" else "✗").append(" Nabız izni\n")
@@ -103,8 +96,7 @@ class WatchSetupActivity : Activity() {
         }
     }
 
-    private fun hasSensorPermissions(): Boolean =
-        has(HealthPermissions.READ_HEART_RATE) && has(HealthPermissions.READ_OXYGEN_SATURATION)
+    private fun hasSensorPermissions(): Boolean = has(PERM_READ_HEART_RATE) && has(PERM_READ_OXYGEN_SATURATION)
 
     private fun has(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
@@ -112,5 +104,8 @@ class WatchSetupActivity : Activity() {
     companion object {
         private const val REQ_SENSORS = 100
         private const val REQ_BACKGROUND = 101
+        private const val PERM_READ_HEART_RATE = "android.permission.health.READ_HEART_RATE"
+        private const val PERM_READ_OXYGEN_SATURATION = "android.permission.health.READ_OXYGEN_SATURATION"
+        private const val PERM_READ_HEALTH_DATA_IN_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
     }
 }
