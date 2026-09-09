@@ -3,16 +3,27 @@ package com.skhealth.guardian.mobile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.EscalationGate
 
 class AlarmEscalationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val alertId = intent.getStringExtra(EXTRA_ALERT_ID)
         val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
-        if (!EscalationGate.shouldEscalate(AlertAcknowledgementStore.lastAcknowledgedAt(context), alertTs)) {
-            if (alertTs > 0L) {
+        val exact = AlertIdentity.isValid(alertId)
+        val shouldEscalate = if (exact) {
+            !AlertAcknowledgementStore.isAcknowledged(context, alertId!!)
+        } else {
+            EscalationGate.shouldEscalate(AlertAcknowledgementStore.lastAcknowledgedAt(context), alertTs)
+        }
+
+        if (!shouldEscalate) {
+            if (exact) {
+                EscalationScheduler.cancel(context, alertId!!, alertTs)
+            } else if (alertTs > 0L) {
                 EscalationScheduler.cancel(context, alertTs)
-                AlarmTimelineStore.add(context, "ESCALATION İPTAL", "Alarm kullanıcı tarafından susturulmuş/onaylanmış")
             }
+            AlarmTimelineStore.add(context, "ESCALATION İPTAL", "Alarm kullanıcı tarafından susturulmuş/onaylanmış")
             return
         }
 
@@ -21,6 +32,8 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         val text = "SK HEALTH GUARDIAN TEKRAR UYARI\n$reason\nAlarm henüz susturulmadı/onaylanmadı."
 
         contacts.filter { it.smsEnabled }.forEach { c ->
+            if (exact && AlertAcknowledgementStore.isAcknowledged(context, alertId!!)) return@forEach
+            if (!exact && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) return@forEach
             val ok = SmsSender(context).send(c.phoneNumber, text, alertTs)
             DeliveryLogStore.add(context, "SMS ESCALATION", mask(c.phoneNumber), ok, if (ok) "tekrar SMS kuyruğa alındı" else "tekrar SMS başlatılamadı")
         }
@@ -29,18 +42,26 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         val preferred = if (callTargets.size > 1) callTargets.drop(1) + callTargets.take(1) else callTargets
         var callOk = false
         for (c in preferred) {
-            if (AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) break
+            val acknowledged = if (exact) {
+                AlertAcknowledgementStore.isAcknowledged(context, alertId!!)
+            } else {
+                AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs
+            }
+            if (acknowledged) break
             callOk = CallPlacer(context).call(c.phoneNumber)
             DeliveryLogStore.add(context, "ARAMA ESCALATION", mask(c.phoneNumber), callOk, if (callOk) "tekrar arama başlatıldı" else "başlatılamadı")
             if (callOk) break
         }
-        EscalationScheduler.markConsumed(context, alertTs)
+
+        if (exact) EscalationScheduler.markConsumed(context, alertId!!, alertTs)
+        else EscalationScheduler.markConsumed(context, alertTs)
         AlarmTimelineStore.add(context, "ESCALATION", "Alarm yanıtlanmadı; tekrar SMS/arama çalıştırıldı, arama=${if (callOk) "başlatıldı" else "başarısız/yok"}")
     }
 
     private fun mask(number: String) = if (number.length <= 4) "****" else "***${number.takeLast(4)}"
 
     companion object {
+        const val EXTRA_ALERT_ID = "alert_id"
         const val EXTRA_ALERT_TS = "alert_ts"
         const val EXTRA_REASON = "reason"
     }
