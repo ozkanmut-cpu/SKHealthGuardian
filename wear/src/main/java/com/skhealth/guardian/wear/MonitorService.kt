@@ -37,10 +37,11 @@ class MonitorService : Service() {
         sensor = SamsungSensorGateway(this)
         bridge = PhoneBridge(this)
         createChannel()
+        val intervalMin = WearSettings.measurementIntervalMs(this) / 60_000L
         startForeground(11, NotificationCompat.Builder(this, "monitor")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Sağlık izleme aktif")
-            .setContentText("SpO₂ ve nabız 5 dakikada bir ölçülüyor")
+            .setContentText("SpO₂ ve nabız $intervalMin dakikada bir ölçülüyor")
             .setOngoing(true).build())
         startHeartbeat()
         startMonitoring()
@@ -64,8 +65,9 @@ class MonitorService : Service() {
         scope.launch {
             safeMeasureCycle()
             while (isActive) {
+                val intervalMs = WearSettings.measurementIntervalMs(this@MonitorService)
                 val now = System.currentTimeMillis()
-                val next = ((now / INTERVAL_MS) + 1L) * INTERVAL_MS
+                val next = ((now / intervalMs) + 1L) * intervalMs
                 delay((next - now).coerceAtLeast(0L))
                 safeMeasureCycle()
             }
@@ -137,7 +139,8 @@ class MonitorService : Service() {
     }
 
     private suspend fun confirmTriggeredReadings(triggerAt: Long, confirmHr: Boolean, confirmSpo2: Boolean) {
-        delayUntil(triggerAt + CONFIRM_DELAY_MS)
+        val confirmDelayMs = WearSettings.confirmDelayMs(this)
+        delayUntil(triggerAt + confirmDelayMs)
         var retryHr = false
         var retrySpo2 = false
 
@@ -152,7 +155,7 @@ class MonitorService : Service() {
         if (!retryHr && !retrySpo2) return
 
         runCatching { sensor.reconnect() }
-        delayUntil(triggerAt + FINAL_RETRY_AT_MS)
+        delayUntil(triggerAt + confirmDelayMs + FINAL_RETRY_AFTER_CONFIRM_MS)
         if (retryHr) {
             val finalHr = runCatching { sensor.measureHeartRate() }.getOrNull()
             if (finalHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = finalHr)) else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
@@ -169,8 +172,7 @@ class MonitorService : Service() {
     }
 
     private suspend fun measureHeartRateWithRetry(): Int? {
-        val waits = listOf(0L, 30_000L, 60_000L)
-        for (wait in waits) {
+        for (wait in WearSettings.retryWaitsMs(this)) {
             if (wait > 0) delay(wait)
             val value = runCatching { sensor.measureHeartRate() }.getOrNull()
             if (value != null) return value
@@ -180,8 +182,7 @@ class MonitorService : Service() {
     }
 
     private suspend fun measureSpO2WithRetry(): Int? {
-        val waits = listOf(0L, 30_000L, 60_000L)
-        for (wait in waits) {
+        for (wait in WearSettings.retryWaitsMs(this)) {
             if (wait > 0) delay(wait)
             val value = runCatching { sensor.measureSpO2() }.getOrNull()
             if (value != null) return value
@@ -212,9 +213,7 @@ class MonitorService : Service() {
 
     companion object {
         const val ACTION_MEASURE_NOW = "com.skhealth.guardian.wear.MEASURE_NOW"
-        private const val INTERVAL_MS = 5 * 60_000L
         private const val MIN_SENSOR_STALE_MS = 10 * 60_000L
-        private const val CONFIRM_DELAY_MS = 2 * 60_000L
-        private const val FINAL_RETRY_AT_MS = 3 * 60_000L
+        private const val FINAL_RETRY_AFTER_CONFIRM_MS = 60_000L
     }
 }
