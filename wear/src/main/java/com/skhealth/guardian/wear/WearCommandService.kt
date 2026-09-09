@@ -20,7 +20,14 @@ class WearCommandService : WearableListenerService() {
                 this,
                 Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW)
             )
-            "/health/config" -> WearSettings.decode(event.data)?.let { WearSettings.save(this, it) }
+            "/health/config" -> WearSettings.decode(event.data)?.let { config ->
+                WearSettings.save(this, config)
+                scope.launch {
+                    sendStatus(
+                        "CONFIG_OK | SpO₂ kritik=${config.spo2CriticalImmediate} | düşük=${config.spo2LowThreshold} | HR yüksek=${config.heartRateHighThreshold} | stale=${config.staleDataMs / 60_000}dk"
+                    )
+                }
+            }
             "/health/silence" -> LocalAlarm.cancel(this)
         }
     }
@@ -39,12 +46,16 @@ class WearCommandService : WearableListenerService() {
                     else -> "HATA | HR ve SpO₂ sensörlerinden geçerli yanıt yok"
                 }
             }.getOrElse { "HATA | ${it.javaClass.simpleName}" }
-            val nodes = Wearable.getNodeClient(this@WearCommandService).connectedNodes.awaitCompat2()
-            nodes.forEach {
-                Wearable.getMessageClient(this@WearCommandService)
-                    .sendMessage(it.id, "/health/status", status.toByteArray())
-                    .awaitCompat2()
-            }
+            sendStatus(status)
+        }
+    }
+
+    private suspend fun sendStatus(status: String) {
+        val nodes = Wearable.getNodeClient(this@WearCommandService).connectedNodes.awaitCompat2()
+        nodes.forEach {
+            Wearable.getMessageClient(this@WearCommandService)
+                .sendMessage(it.id, "/health/status", status.toByteArray())
+                .awaitCompat2()
         }
     }
 }
