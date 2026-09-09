@@ -9,26 +9,29 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertType
+import com.skhealth.guardian.shared.WatchdogPolicy
 import kotlinx.coroutines.*
 
 class WatchdogService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var alertedForTs = -1L
 
     override fun onCreate() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("watchdog", "Health watchdog", NotificationManager.IMPORTANCE_LOW))
         startForeground(21, NotificationCompat.Builder(this, "watchdog").setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("SK Health Guardian aktif").setContentText("Saat verisi izleniyor").setOngoing(true).build())
+            .setContentTitle("SK Health Guardian aktif").setContentText("Sağlık verisi izleniyor").setOngoing(true).build())
         scope.launch {
             while (isActive) {
+                val now = System.currentTimeMillis()
                 val last = MonitoringState.lastReading(this@WatchdogService)
                 val stale = AppSettings.load(this@WatchdogService).staleDataMs
-                if (last > 0 && System.currentTimeMillis() - last > stale && alertedForTs != last) {
-                    alertedForTs = last
+                val lastAlertedFor = MonitoringState.lastStaleAlertedFor(this@WatchdogService)
+                if (WatchdogPolicy.shouldAlert(now, last, stale, lastAlertedFor)) {
+                    // Persist before dispatch so a service/process restart cannot duplicate the same stale incident.
+                    MonitoringState.markStaleAlertedFor(this@WatchdogService, last)
                     AlertDispatcher(this@WatchdogService).dispatch(
-                        AlertEvent(AlertType.DATA_STALE, System.currentTimeMillis(), null, "Saatten ${stale / 60_000} dakikadır veri gelmiyor"),
+                        AlertEvent(AlertType.DATA_STALE, now, null, "${stale / 60_000} dakikadır geçerli sağlık verisi gelmiyor"),
                         HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
                     )
                 }
