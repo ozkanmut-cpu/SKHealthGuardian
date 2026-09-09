@@ -7,8 +7,8 @@ import com.skhealth.guardian.shared.AlarmConfig
 
 class MeasurementSettingsActivity : Activity() {
  private lateinit var root:LinearLayout
- private fun number(label:String,value:Int)=UiStyle.field(this,label,value.toString(),true)
- private fun input(field:LinearLayout)=UiStyle.fieldInput(field)
+ private fun number(label:String,value:Int)=UiStyle.labeledField(this,label,value.toString(),true)
+ private fun input(field:LinearLayout)=UiStyle.labeledFieldInput(field)
  override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);UiStyle.applyBars(this);val cfg=AppSettings.load(this);root=UiStyle.page(this);setContentView(ScrollView(this).apply{setBackgroundColor(UiStyle.BG);addView(root)})
   root.addView(UiStyle.title(this,"Ölçüm ve alarm ayarları"));root.addView(UiStyle.subtitle(this,"Tüm eşikler telefondan yönetilir. Değişiklikler Galaxy Watch'a otomatik gönderilir."))
   val health=UiStyle.card(this);health.addView(UiStyle.text(this,"SpO₂ ve nabız",19f,UiStyle.TEXT,true))
