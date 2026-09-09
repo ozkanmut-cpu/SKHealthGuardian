@@ -16,14 +16,25 @@ class WearReadingService : WearableListenerService() {
         }
         if (event.path != "/health/reading") return
         val p = String(event.data).split('|')
-        if (p.size < 5) return
-        val reading = HealthReading(
-            timestampMs = p[0].toLongOrNull() ?: System.currentTimeMillis(),
-            spo2 = p[1].toIntOrNull(),
-            heartRate = p[2].toIntOrNull(),
-            valid = p[3].toBooleanStrictOrNull() ?: false,
-            source = p[4]
-        )
+        val reading = when {
+            p.size >= 6 -> HealthReading(
+                id = p[0],
+                timestampMs = p[1].toLongOrNull() ?: System.currentTimeMillis(),
+                spo2 = p[2].toIntOrNull(),
+                heartRate = p[3].toIntOrNull(),
+                valid = p[4].toBooleanStrictOrNull() ?: false,
+                source = p[5]
+            )
+            p.size >= 5 -> HealthReading(
+                timestampMs = p[0].toLongOrNull() ?: System.currentTimeMillis(),
+                spo2 = p[1].toIntOrNull(),
+                heartRate = p[2].toIntOrNull(),
+                valid = p[3].toBooleanStrictOrNull() ?: false,
+                source = p[4]
+            )
+            else -> return
+        }
+        if (HistoryStore.contains(this, reading.id)) return
         HistoryStore.add(this, reading)
         MonitoringState.markReading(this, reading.timestampMs)
         val cfg = AppSettings.load(this)
