@@ -82,6 +82,7 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply { text = "Alarm olay geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, AlarmTimelineActivity::class.java)) } })
         root.addView(Button(this).apply { text = "SMS / arama kayıtları"; setOnClickListener { startActivity(Intent(this@MainActivity, DeliveryLogActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Ölçüm geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, HistoryActivity::class.java)) } })
+        root.addView(Button(this).apply { text = "Ölçüm grafikleri"; setOnClickListener { startActivity(Intent(this@MainActivity, HistoryChartActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Yedekle / dışa aktar"; setOnClickListener { startActivity(Intent(this@MainActivity, ExportActivity::class.java)) } })
     }
 

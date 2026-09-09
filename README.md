@@ -1,83 +1,91 @@
-# SK Health Guardian — Galaxy Watch8 + Android
+# SK Health Guardian — V0.6 Reliability
 
-Tasker, Gadgetbridge, Health Connect and ntfy are not required in the alarm chain.
+Galaxy Watch8 + Android safety/wellness monitoring system. Tasker, Gadgetbridge, Health Connect and ntfy are not required in the alarm chain.
 
 ## Architecture
 
-- `wear`: Galaxy Watch8 sensor acquisition, local watch alarm, reboot recovery, sensor watchdog, offline reading queue and phone transport.
-- `mobile`: receives readings, evaluates alarms, full-screen local alarm, SMS/call dispatch, settings, contacts, history, self-test and watchdog.
+- `wear`: Galaxy Watch8 sensor acquisition, local watch alarm, reboot recovery, heartbeat, battery status, sensor watchdog, offline reading queue and phone transport.
+- `mobile`: receives readings, evaluates alarms, full-screen local alarm, SMS/call dispatch, settings, contacts, history, graphs, system tests, export/backup and watchdog.
 - `shared`: thresholds, models and deterministic alarm engine.
 
-## Current alarm defaults
+## Alarm defaults
 
-- Normal SpO₂ sampling: every 5 minutes on a strict wall-clock schedule.
-- SpO₂ `<80%`: immediate alarm on the first valid reading.
-- SpO₂ `80–89%`: second measurement after 2 minutes; two valid low readings confirm the alarm.
-- If the confirmation measurement fails technically: reconnect, then one final attempt 1 minute later.
-- Heart rate: sampled every 5 minutes.
-- Heart rate `>130 bpm`: confirm after 2 minutes; if technical confirmation fails, one final attempt 1 minute later.
-- Low-heart-rate alarm exists but is disabled by default.
+- SpO₂ every 5 minutes on a strict wall-clock schedule.
+- SpO₂ `<80%`: immediate alarm on first valid reading.
+- SpO₂ `80–89%`: confirmation after 2 minutes; two valid low readings required.
+- Failed confirmation: reconnect + one final attempt 1 minute later.
+- Heart rate every 5 minutes.
+- HR `>130 bpm`: confirmation after 2 minutes; failed confirmation gets one final attempt 1 minute later.
+- Low-HR alarm exists but is disabled by default.
 - Phone stale-data alarm default: 10 minutes without a watch reading.
+- Optional unanswered-alarm escalation is disabled by default (`0` minutes) and can be enabled from phone settings.
 
-## Reliability features
+## Reliability / safety features
 
-- Wear OS health foreground service and `START_STICKY`.
-- Watch boot recovery.
-- Strict 5-minute wall-clock scheduler without drift.
-- Mutex protection against scheduled/manual measurement overlap.
-- Sensor reconnect and retry loops.
-- Watch-side sensor watchdog: stale valid sensor data triggers reconnect + recovery measurement and local sensor-failure alarm if recovery fails.
-- Local watch alarm remains independent of phone connectivity.
-- Store-and-forward: up to 500 watch readings are queued locally while the phone is disconnected and replayed after reconnect.
-- Stable reading UUIDs prevent replay duplicates in phone history.
-- Persistent alert deduplication/cooldown prevents duplicate SMS/calls after reconnect/replay; significant deterioration bypasses cooldown.
-- Phone-side stale-data watchdog.
-- Measurement history (last 1000 readings).
+- Wear OS health foreground service + `START_STICKY`.
+- Watch boot recovery only after required health permissions exist.
+- Strict wall-clock scheduler and mutex protection against manual/scheduled overlap.
+- Sensor reconnect/retry loops and watch-side sensor watchdog.
+- Local watch alarm independent of phone connectivity.
+- Store-and-forward queue for up to 500 readings while disconnected.
+- Stable reading UUIDs prevent replay duplicates.
+- Old replayed readings are stored in history but do not trigger fresh emergency SMS/calls.
+- Persistent alert deduplication/cooldown; significant deterioration can bypass cooldown.
+- Phone stale-data watchdog.
+- One-minute watch heartbeat independent of the sensor measurement loop.
+- Watch and phone low-battery warnings with recovery hysteresis.
+- Settings are synchronized phone → watch and the watch returns a `CONFIG_OK` acknowledgement with the applied thresholds.
+- SMS uses Android sent-result callbacks. Failed sends are retried automatically after 30 seconds and then 90 seconds, with retry deduplication.
+- Call failover tries the next call-enabled contact when call initiation fails.
+- Optional unanswered-alarm escalation can repeat SMS and call attempts after a user-selected delay.
+- Alarm acknowledgement/silence cancels escalation behavior.
+- Persistent alarm timeline and masked SMS/call delivery logs.
 
 ## Phone UI
 
-- Alarm threshold settings.
-- Settings are automatically synchronized to the watch and persisted there.
+- Alarm thresholds + stale-data timeout + optional escalation delay.
 - Emergency contact editor with per-contact SMS/call flags.
-- Emergency contacts are encrypted with an Android Keystore AES-GCM key; legacy plaintext data is migrated automatically.
-- Real SMS test button.
-- Real call test button.
-- Full-screen critical alarm over the lock screen with current SpO₂/HR, alarm reason, remote-alert status, silence, re-measure and primary-contact call controls.
-- Phone/watch self-test.
-- System-health screen for SMS, call, notification, Bluetooth, full-screen-intent and battery-optimization status plus last watch data/self-test state.
-- Persistent masked SMS/call attempt log.
+- Emergency contacts encrypted with Android Keystore AES-GCM; legacy plaintext data migrates automatically.
+- Full-screen lock-screen alarm with SpO₂/HR, reason, delivery status, silence, re-measure and call controls.
+- Real SMS test and real call test.
+- Full system-test screen: permission/contact preflight, watch connection, config ACK request, watch self-test and manual measurement; destructive SMS/call test requires confirmation.
+- System-health screen: permissions, full-screen-intent, battery optimization, recent reading, watch heartbeat, watch battery, phone battery and latest watch status/ACK.
+- Measurement history (last 1000 readings).
+- Measurement graphs for SpO₂ and heart rate.
+- Alarm event timeline.
+- CSV measurement export.
+- JSON backup containing settings, contacts, readings, alarm timeline and delivery log. JSON export contains phone numbers in plaintext and should be stored securely.
 
 ## Samsung Health Sensor SDK
 
 Samsung's proprietary AAR is intentionally **not committed to this repository**.
 
-Download Samsung Health Sensor SDK v1.4.1 from Samsung Developer and place:
+Place the official Samsung Health Sensor SDK AAR at:
 
 `wear/libs/samsung-health-sensor-api.aar`
 
-The Gradle build auto-detects it. Without the AAR, the project compiles against the mock sensor gateway. With the AAR, `src/samsung/.../SamsungSensorGateway.kt` is selected.
+The Gradle build auto-detects it. Without the AAR, CI compiles against the mock gateway. With the AAR, `src/samsung/.../SamsungSensorGateway.kt` is selected.
 
-For development, Galaxy Watch Health Sensor Service Developer Mode is required unless the application has Samsung partner approval.
+## Android permissions / deployment
 
-## Android permissions / deployment notes
+The phone uses `SEND_SMS` and `CALL_PHONE`. `SEND_SMS` is hard-restricted on Android, so private sideload deployment must ensure the installer/device grants or allowlists it. The app does not automatically dial emergency-service numbers.
 
-The phone uses `SEND_SMS` and `CALL_PHONE`. `SEND_SMS` is hard-restricted on Android; private sideload deployment must ensure the installer/device grants or allowlists it. The app does not automatically dial emergency-service numbers.
+Watch setup requests granular heart-rate, oxygen-saturation, background-health and notification permissions before starting monitoring.
 
-The phone also requests notification, Bluetooth, full-screen-intent and foreground-service capabilities required by the monitoring/alarm path.
+## CI
 
-## GitHub Actions
+`.github/workflows/android-build.yml` runs shared alarm unit tests and builds both mobile and wear debug APKs. CI uses the mock sensor gateway unless the proprietary Samsung AAR is supplied outside the repository.
 
-`.github/workflows/android-build.yml` builds the project on pushes/PRs and uploads mobile + wear debug APK artifacts. CI uses the mock sensor gateway unless the proprietary Samsung AAR is supplied outside the repository.
+## Remaining physical Watch8 validation
 
-## Remaining physical-device validation
+Software-side work that does not require the physical watch is implemented in V0.6. Remaining critical work requires the actual Galaxy Watch8:
 
-The software-side reliability pass is implemented. The remaining critical step requires the actual Galaxy Watch8:
-
-1. Add the official Samsung AAR and compile the real gateway.
-2. Resolve any exact SDK signature differences against Samsung v1.4.1 if necessary.
-3. Enable Health Sensor Service Developer Mode on Watch8 and install the Wear APK.
+1. Add the official Samsung Health Sensor SDK AAR and compile the real gateway.
+2. Resolve any exact Samsung v1.4.1 API signature differences if necessary.
+3. Enable Health Sensor Service Developer Mode and install the real Wear APK.
 4. Verify `SPO2_ON_DEMAND` works repeatedly while the display is off and the health foreground service is running.
-5. Run multi-hour 5-minute sampling, reboot, disconnect/reconnect, offline-queue, stale-data, full-screen alarm, SMS and call tests.
-6. Compare Watch8 SpO₂ readings against a known-good fingertip pulse oximeter, especially around low readings.
+5. Run multi-hour 5-minute sampling plus reboot, disconnect/reconnect, offline queue, heartbeat, stale-data and battery tests.
+6. Run the real end-to-end alarm chain: watch alarm → phone → SMS sent result/retry → call/failover → silence/escalation.
+7. Compare Watch8 SpO₂ against a known-good fingertip pulse oximeter, especially around low readings.
 
-This project is a wellness/safety alert system, not a certified medical device.
+This is a wellness/safety alert system, not a certified medical device.
