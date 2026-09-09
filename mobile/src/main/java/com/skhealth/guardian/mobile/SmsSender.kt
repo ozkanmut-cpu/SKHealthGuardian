@@ -5,16 +5,20 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
+import com.skhealth.guardian.shared.AlertIdentity
 import java.util.UUID
 
 class SmsSender(private val context: Context) {
-    fun send(number: String, message: String, alertTs: Long = 0L): Boolean =
-        send(number, message, UUID.randomUUID().toString(), 0, alertTs)
+    fun send(number: String, message: String, alertTs: Long = 0L, alertId: String? = null): Boolean =
+        send(number, message, UUID.randomUUID().toString(), 0, alertTs, alertId)
 
-    fun send(number: String, message: String, messageId: String, attempt: Int, alertTs: Long = 0L): Boolean {
-        if (alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) return false
+    fun send(number: String, message: String, messageId: String, attempt: Int, alertTs: Long = 0L, alertId: String? = null): Boolean {
+        val exact = AlertIdentity.isValid(alertId)
+        if (exact && AlertAcknowledgementStore.isAcknowledged(context, alertId!!)) return false
+        if (!exact && alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) return false
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return false
         return runCatching {
             val sms = context.getSystemService(SmsManager::class.java)
@@ -26,6 +30,7 @@ class SmsSender(private val context: Context) {
                 val commonRequestCode = messageId.hashCode() * 31 + attempt * 1000 + index
                 val sentIntent = Intent(context, SmsStatusReceiver::class.java).apply {
                     action = SmsStatusReceiver.ACTION_SMS_SENT
+                    data = Uri.parse("skhealth://sms/sent/${Uri.encode(messageId)}/$attempt/$index")
                     putExtra(SmsStatusReceiver.EXTRA_TARGET, masked)
                     putExtra(SmsStatusReceiver.EXTRA_NUMBER, number)
                     putExtra(SmsStatusReceiver.EXTRA_MESSAGE, message)
@@ -34,6 +39,7 @@ class SmsSender(private val context: Context) {
                     putExtra(SmsStatusReceiver.EXTRA_PART, index + 1)
                     putExtra(SmsStatusReceiver.EXTRA_TOTAL, parts.size)
                     putExtra(SmsStatusReceiver.EXTRA_ALERT_TS, alertTs)
+                    if (exact) putExtra(SmsStatusReceiver.EXTRA_ALERT_ID, alertId)
                 }
                 sentIntents += PendingIntent.getBroadcast(
                     context,
@@ -44,12 +50,14 @@ class SmsSender(private val context: Context) {
 
                 val deliveredIntent = Intent(context, SmsStatusReceiver::class.java).apply {
                     action = SmsStatusReceiver.ACTION_SMS_DELIVERED
+                    data = Uri.parse("skhealth://sms/delivered/${Uri.encode(messageId)}/$attempt/$index")
                     putExtra(SmsStatusReceiver.EXTRA_TARGET, masked)
                     putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
                     putExtra(SmsStatusReceiver.EXTRA_ATTEMPT, attempt)
                     putExtra(SmsStatusReceiver.EXTRA_PART, index + 1)
                     putExtra(SmsStatusReceiver.EXTRA_TOTAL, parts.size)
                     putExtra(SmsStatusReceiver.EXTRA_ALERT_TS, alertTs)
+                    if (exact) putExtra(SmsStatusReceiver.EXTRA_ALERT_ID, alertId)
                 }
                 deliveredIntents += PendingIntent.getBroadcast(
                     context,
