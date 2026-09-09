@@ -34,10 +34,10 @@ class DevicesActivity : Activity() {
         root.addView(deviceCard(
             title = "Galaxy Watch",
             connected = watchConnected,
-            rows = listOf(
-                "Durum" to if (watchConnected) "Bağlı" else "Bağlı değil",
-                "Pil seviyesi" to if (watchBattery in 0..100) "%$watchBattery" else "—",
-                "Son bağlantı" to if (heartbeatAt > 0) ageText((now - heartbeatAt).coerceAtLeast(0L)) else "—"
+            rows = listOf<Pair<String, String>>(
+                "Durum" to (if (watchConnected) "Bağlı" else "Bağlı değil"),
+                "Pil seviyesi" to (if (watchBattery in 0..100) "%$watchBattery" else "—"),
+                "Son bağlantı" to (if (heartbeatAt > 0) ageText((now - heartbeatAt).coerceAtLeast(0L)) else "—")
             ),
             action = null
         ))
@@ -47,10 +47,10 @@ class DevicesActivity : Activity() {
         root.addView(deviceCard(
             title = "PC-60FW",
             connected = pcConnected,
-            rows = listOf(
-                "Durum" to if (pcConnected) "Bağlı" else "Bağlı değil",
-                "Pil seviyesi" to pc.batteryLevel?.let { "%$it" } ?: "—",
-                "Son veri" to if (pc.lastPacketAt > 0) ageText((now - pc.lastPacketAt).coerceAtLeast(0L)) else "—"
+            rows = listOf<Pair<String, String>>(
+                "Durum" to (if (pcConnected) "Bağlı" else "Bağlı değil"),
+                "Pil seviyesi" to (pc.batteryLevel?.let { "%$it" } ?: "—"),
+                "Son veri" to (if (pc.lastPacketAt > 0) ageText((now - pc.lastPacketAt).coerceAtLeast(0L)) else "—")
             ),
             action = { startActivity(Intent(this, Pc60Activity::class.java)) }
         ), UiStyle.sectionParams(this))
