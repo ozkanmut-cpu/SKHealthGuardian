@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.content.SharedPreferences
+import com.skhealth.guardian.shared.BoundedRetentionPolicy
 
 /**
  * Small durable bounded set stored as newline-delimited IDs.
@@ -21,19 +22,12 @@ object BoundedIdStore {
         protectedIds: Set<String> = emptySet()
     ): Boolean {
         if (id.isBlank() || maxEntries <= 0) return false
-        val ordered = prefs.getString(key, "")
+        val current = prefs.getString(key, "")
             .orEmpty()
             .lineSequence()
-            .filter { it.isNotBlank() && it != id }
-            .toMutableList()
-        ordered += id
-
-        val protected = ordered.filter { it in protectedIds }.distinct()
-        val recentUnprotected = ordered
-            .filter { it !in protectedIds }
-            .takeLast(maxEntries)
-        val retained = (protected + recentUnprotected).distinct()
-
+            .filter { it.isNotBlank() }
+            .toList()
+        val retained = BoundedRetentionPolicy.retain(current, id, maxEntries, protectedIds)
         return prefs.edit()
             .putString(key, retained.joinToString("\n"))
             .commit()
