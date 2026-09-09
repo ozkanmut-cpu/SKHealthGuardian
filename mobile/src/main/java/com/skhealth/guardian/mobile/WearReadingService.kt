@@ -4,10 +4,9 @@ import android.app.NotificationManager
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import com.skhealth.guardian.shared.AlarmEngine
-import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertIdentity
-import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.TechnicalAlertWireCodec
 
 class WearReadingService : WearableListenerService() {
     private var engine: AlarmEngine? = null
@@ -53,20 +52,7 @@ class WearReadingService : WearableListenerService() {
             return
         }
         if (event.path == "/health/alert") {
-            val raw = String(event.data)
-            val p = raw.split('|', limit = 5)
-            if (p.size < 5 || p[0] != "v2") return
-            val eventId = p[1].trim()
-            val type = runCatching { AlertType.valueOf(p[2]) }.getOrNull() ?: return
-            val alertTs = p[3].toLongOrNull() ?: return
-            if (eventId.isBlank() || eventId.length > 128 || alertTs <= 0L) return
-            val alert = AlertEvent(
-                type = type,
-                timestampMs = alertTs,
-                reading = null,
-                message = p[4].ifBlank { "Saat teknik sağlık alarmı" },
-                eventId = eventId
-            )
+            val alert = TechnicalAlertWireCodec.decode(String(event.data)) ?: return
             val alertId = AlertIdentity.of(alert)
             if (AlertAcknowledgementStore.isAcknowledged(this, alertId)) return
             val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
