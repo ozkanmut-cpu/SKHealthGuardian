@@ -3,12 +3,8 @@ package com.skhealth.guardian.mobile
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
-import android.widget.Button
-import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
 import com.skhealth.guardian.shared.AlarmConfig
 import com.skhealth.guardian.shared.HealthReading
@@ -20,27 +16,32 @@ class ExportActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 40) }
-        root.addView(TextView(this).apply { text = "Veri yönetimi"; textSize = 27f; setTypeface(typeface, Typeface.BOLD) })
-        root.addView(TextView(this).apply {
-            text = "Ölçümlerini dışa aktarabilir veya tam uygulama yedeği oluşturabilirsin. JSON yedeği kişiler ve telefon numaralarını açık metin içerir; güvenli yerde sakla."
-            textSize = 15f; setPadding(0, 10, 0, 20)
-        })
-        root.addView(TextView(this).apply { text = "Dışa aktar"; textSize = 20f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 6, 0, 8) })
-        root.addView(Button(this).apply { text = "Ölçüm geçmişi (CSV)"; setOnClickListener { createDocument("text/csv", "SKHealthGuardian_measurements.csv", "csv") } })
-        root.addView(Button(this).apply { text = "Watch ↔ PC-60FW doğrulama (CSV)"; setOnClickListener { createDocument("text/csv", "SKHealthGuardian_watch_pc60_reliability.csv", "reliability_csv") } })
-        root.addView(Button(this).apply { text = "Tam uygulama yedeği (JSON)"; setOnClickListener { createDocument("application/json", "SKHealthGuardian_backup.json", "json") } })
-        root.addView(TextView(this).apply { text = "Geri yükle"; textSize = 20f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 24, 0, 8) })
-        root.addView(TextView(this).apply {
-            text = "Dikkat: geri yükleme, yedekte bulunan ayarlar, kişiler ve geçmiş verilerle mevcut verileri değiştirir. Dosya önce doğrulanır ve işlem başlamadan tekrar onay istenir."
-            textSize = 15f; setPadding(0, 0, 0, 10)
-        })
-        root.addView(Button(this).apply { text = "JSON YEDEĞİNDEN GERİ YÜKLE"; setOnClickListener { chooseBackup() } })
-        root.addView(TextView(this).apply {
-            text = "Desteklenen formatlar: schema v3 (güncel), v2 ve v1. Eski yedeklerde bulunmayan alanlar güvenli varsayılanlarla ele alınır."
-            textSize = 14f; setPadding(0, 16, 0, 0)
-        })
-        setContentView(ScrollView(this).apply { addView(root) })
+        UiStyle.applyBars(this)
+        val root = UiStyle.page(this)
+        root.addView(UiStyle.title(this, "Veri yönetimi"))
+        root.addView(UiStyle.subtitle(this, "Ölçümlerini dışa aktar, tam uygulama yedeği oluştur veya daha önce alınmış bir yedeği geri yükle."))
+
+        val exportCard = UiStyle.card(this)
+        exportCard.addView(UiStyle.text(this, "Dışa aktar", 19f, UiStyle.TEXT, true))
+        exportCard.addView(UiStyle.text(this, "CSV dosyaları analiz için, JSON dosyası ise tam uygulama yedeği için kullanılır.", 14f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@ExportActivity, 6), 0, 0) })
+        exportCard.addView(UiStyle.button(this, "Ölçüm geçmişi • CSV", false).apply { setOnClickListener { createDocument("text/csv", "SKHealthGuardian_measurements.csv", "csv") } })
+        exportCard.addView(UiStyle.button(this, "Watch ↔ PC-60FW doğrulama • CSV", false).apply { setOnClickListener { createDocument("text/csv", "SKHealthGuardian_watch_pc60_reliability.csv", "reliability_csv") } })
+        exportCard.addView(UiStyle.button(this, "Tam uygulama yedeği • JSON").apply { setOnClickListener { createDocument("application/json", "SKHealthGuardian_backup.json", "json") } })
+        root.addView(exportCard)
+
+        val privacyCard = UiStyle.card(this)
+        privacyCard.addView(UiStyle.text(this, "Gizlilik uyarısı", 17f, UiStyle.AMBER, true))
+        privacyCard.addView(UiStyle.text(this, "JSON yedeği acil durum kişilerinin isim ve telefon numaralarını açık metin olarak içerir. Dosyayı güvenli bir yerde sakla.", 14f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@ExportActivity, 7), 0, 0) })
+        root.addView(privacyCard, UiStyle.sectionParams(this))
+
+        val restoreCard = UiStyle.card(this)
+        restoreCard.addView(UiStyle.text(this, "Geri yükle", 19f, UiStyle.TEXT, true))
+        restoreCard.addView(UiStyle.text(this, "Geri yükleme yedekte bulunan ayarları, kişileri ve geçmiş verileri mevcut verilerin yerine geçirir. Dosya önce doğrulanır ve işlemden önce tekrar onay istenir.", 14f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@ExportActivity, 6), 0, 0) })
+        restoreCard.addView(UiStyle.button(this, "JSON yedeğinden geri yükle", false).apply { setOnClickListener { chooseBackup() } })
+        restoreCard.addView(UiStyle.text(this, "Desteklenen şemalar: v3, v2 ve v1", 13f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@ExportActivity, 10), 0, 0) })
+        root.addView(restoreCard, UiStyle.sectionParams(this))
+
+        setContentView(ScrollView(this).apply { setBackgroundColor(UiStyle.BG); addView(root) })
     }
 
     private fun createDocument(type: String, name: String, kind: String) {
