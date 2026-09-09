@@ -34,6 +34,7 @@ class WearAlarmActivity : Activity() {
         val reason = intent.getStringExtra(EXTRA_REASON) ?: "Sağlık alarmı"
         val spo2 = intent.getIntExtra(EXTRA_SPO2, -1)
         val hr = intent.getIntExtra(EXTRA_HR, -1)
+        val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, System.currentTimeMillis())
         val compact = resources.configuration.screenWidthDp < 220 || resources.configuration.fontScale >= 1.25f
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -61,6 +62,7 @@ class WearAlarmActivity : Activity() {
         root.addView(action("🔕","Alarmı sustur",red) {
             LocalAlarm.cancel(this)
             getSystemService(NotificationManager::class.java).cancel(LocalAlarm.NOTIFICATION_ID)
+            PhoneBridge(this).sendAlarmAcknowledgement(alertTs, reason)
             finish()
         }, sectionParams(8))
 
@@ -98,5 +100,6 @@ class WearAlarmActivity : Activity() {
         const val EXTRA_REASON="reason"
         const val EXTRA_SPO2="spo2"
         const val EXTRA_HR="hr"
+        const val EXTRA_ALERT_TS="alert_ts"
     }
 }
