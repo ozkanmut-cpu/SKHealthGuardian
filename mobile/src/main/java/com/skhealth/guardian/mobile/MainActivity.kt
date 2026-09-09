@@ -82,7 +82,7 @@ class MainActivity : Activity() {
             WatchStatusStore.mark(this@MainActivity, "CONFIG_BEKLENİYOR | saat ACK bekleniyor")
             Toast.makeText(this@MainActivity, "Kaydedildi; saat onayı bekleniyor", Toast.LENGTH_SHORT).show()
         }})
-        root.addView(Button(this).apply { text = "Tam sistem testi"; setOnClickListener { startActivity(Intent(this@MainActivity, SystemTestActivity::class.java)) } })
+        root.addView(Button(this).apply { text = "Kurulum / QA sihirbazı"; setOnClickListener { startActivity(Intent(this@MainActivity, SystemTestActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Kişi / telefon tanımla"; setOnClickListener { startActivity(Intent(this@MainActivity, ContactsActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Gerçek SMS testi"; setOnClickListener { testSms() } })
         root.addView(Button(this).apply { text = "Gerçek arama testi"; setOnClickListener { testCall() } })
