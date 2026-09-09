@@ -5,6 +5,7 @@ import com.skhealth.guardian.shared.AlarmConfig
 
 object AppSettings {
     private const val PREF = "guardian_settings"
+
     fun load(context: Context): AlarmConfig {
         val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         return AlarmConfig(
@@ -29,5 +30,6 @@ object AppSettings {
             .putInt("hr_low", config.heartRateLowThreshold)
             .putLong("stale_ms", config.staleDataMs)
             .apply()
+        WatchCommandSender(context).sendConfig(config)
     }
 }
