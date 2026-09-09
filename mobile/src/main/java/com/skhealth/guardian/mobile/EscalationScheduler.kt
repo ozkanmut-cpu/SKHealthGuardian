@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.OverdueEscalationPolicy
@@ -30,7 +31,7 @@ object EscalationScheduler {
     fun cancel(context: Context, alertId: String, alertTs: Long) {
         if (!AlertIdentity.isValid(alertId)) return
         context.getSystemService(AlarmManager::class.java).cancel(pendingIntent(context, alertId, alertTs, ""))
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().remove(DUE2_PREFIX + alertId).remove(REASON2_PREFIX + alertId).remove(TS2_PREFIX + alertId).commit()
+        cleanupExact(context.getSharedPreferences(PREF, Context.MODE_PRIVATE), alertId)
     }
 
     fun markConsumed(context: Context, alertId: String, alertTs: Long) = cancel(context, alertId, alertTs)
@@ -60,9 +61,16 @@ object EscalationScheduler {
 
         prefs.all.filterKeys { it.startsWith(DUE2_PREFIX) }.forEach { (key, value) ->
             val alertId = key.removePrefix(DUE2_PREFIX)
-            val dueAt = value as? Long ?: return@forEach
+            val dueAt = value as? Long
+            if (dueAt == null) {
+                cleanupExact(prefs, alertId)
+                return@forEach
+            }
             val alertTs = prefs.getLong(TS2_PREFIX + alertId, 0L)
-            if (!AlertIdentity.isValid(alertId) || alertTs <= 0L) { cancel(context, alertId, alertTs); return@forEach }
+            if (!AlertIdentity.isValid(alertId) || alertTs <= 0L) {
+                cleanupExact(prefs, alertId)
+                return@forEach
+            }
             if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) { cancel(context, alertId, alertTs); return@forEach }
             if (OverdueEscalationPolicy.decide(nowMs, alertTs, maxAgeMs) == OverdueEscalationPolicy.Decision.EXPIRE) {
                 cancel(context, alertId, alertTs)
@@ -89,6 +97,14 @@ object EscalationScheduler {
             restored++
         }
         return restored
+    }
+
+    private fun cleanupExact(prefs: SharedPreferences, alertId: String) {
+        prefs.edit()
+            .remove(DUE2_PREFIX + alertId)
+            .remove(REASON2_PREFIX + alertId)
+            .remove(TS2_PREFIX + alertId)
+            .commit()
     }
 
     private fun arm(context: Context, alertId: String, alertTs: Long, reason: String, dueAtMs: Long) {
