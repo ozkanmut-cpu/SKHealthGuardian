@@ -15,6 +15,13 @@ class BootReceiver : BroadcastReceiver() {
             ContextCompat.startForegroundService(context, Intent(context, WatchdogService::class.java))
         }
 
+        // AlarmManager entries are cleared by reboot. Restore only still-unacknowledged
+        // persisted escalations; acknowledged ones are removed by the scheduler.
+        val restored = EscalationScheduler.restorePending(context)
+        if (restored > 0) {
+            AlarmTimelineStore.add(context, "ESCALATION GERİ YÜKLENDİ", "$restored bekleyen alarm telefon yeniden başladıktan sonra yeniden planlandı")
+        }
+
         if (!Pc60StatusStore.monitoringEnabled(context)) return
         val bluetoothReady = Build.VERSION.SDK_INT < 31 ||
             (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
