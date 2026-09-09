@@ -36,6 +36,17 @@ object EscalationScheduler {
 
     fun markConsumed(context: Context, alertId: String, alertTs: Long) = cancel(context, alertId, alertTs)
 
+    /** Exact ACK IDs referenced by still-pending escalations must not be pruned from ACK storage. */
+    fun pendingExactAlertIds(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        return prefs.all.keys
+            .asSequence()
+            .filter { it.startsWith(DUE2_PREFIX) }
+            .map { it.removePrefix(DUE2_PREFIX) }
+            .filter { AlertIdentity.isValid(it) }
+            .toSet()
+    }
+
     @Synchronized
     fun schedule(context: Context, alertTs: Long, reason: String, dueAtMs: Long) {
         if (alertTs <= 0L || dueAtMs <= 0L) return
