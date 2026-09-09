@@ -20,5 +20,9 @@ object SmsRetryState {
     fun isClaimed(context: Context, messageId: String, attempt: Int): Boolean =
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(key(messageId, attempt), false)
 
+    internal fun clearClaim(context: Context, messageId: String, attempt: Int) = synchronized(this) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().remove(key(messageId, attempt)).commit()
+    }
+
     private fun key(messageId: String, attempt: Int) = "scheduled_${messageId}_$attempt"
 }
