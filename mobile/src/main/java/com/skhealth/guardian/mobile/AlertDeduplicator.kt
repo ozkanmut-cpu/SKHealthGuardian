@@ -6,7 +6,12 @@ import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertType
 
 object AlertDeduplicator {
-    fun shouldDispatch(context: Context, alert: AlertEvent): Boolean {
+    /**
+     * Claim is process-atomic: two concurrent producers evaluating the same alert type
+     * cannot both pass the read/check/write window and trigger duplicate SMS/call dispatch.
+     * SharedPreferences keeps the claim across service/process recreation.
+     */
+    fun shouldDispatch(context: Context, alert: AlertEvent): Boolean = synchronized(this) {
         val prefs = context.getSharedPreferences("alert_dedup", Context.MODE_PRIVATE)
         val key = alert.type.name
         val now = System.currentTimeMillis()
@@ -19,12 +24,13 @@ object AlertDeduplicator {
             else -> null
         }
 
-        if (!AlertDedupPolicy.shouldDispatch(alert.type, now, lastAt, lastValue, value)) return false
+        if (!AlertDedupPolicy.shouldDispatch(alert.type, now, lastAt, lastValue, value)) {
+            return@synchronized false
+        }
 
-        prefs.edit()
-            .putLong("${key}_at", now)
-            .apply { if (value != null) putInt("${key}_value", value) }
-            .apply()
-        return true
+        val editor = prefs.edit().putLong("${key}_at", now)
+        if (value != null) editor.putInt("${key}_value", value)
+        editor.commit()
+        true
     }
 }
