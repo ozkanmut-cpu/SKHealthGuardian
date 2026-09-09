@@ -74,8 +74,6 @@ object QaExactChaosRunner {
             val instance = AlarmInstance(id, wallClock)
             alarms += instance
 
-            // A brand-new exact ID must never inherit ACK state from an older alarm, regardless of
-            // whether its wall-clock timestamp moved backwards.
             if (acknowledged.contains(id)) {
                 violations += "new exact alarm inherited ACK at op=$index id=$id ts=${instance.timestampMs}"
             }
@@ -97,18 +95,10 @@ object QaExactChaosRunner {
                     if (alarms.isNotEmpty()) {
                         val target = alarms[random.nextInt(alarms.size)]
                         val allowed = !acknowledged.contains(target.id)
-                        if (allowed) {
-                            remoteAllowed++
-                            if (acknowledged.contains(target.id)) {
-                                violations += "remote allowed for ACKed exact alarm at op=$index id=${target.id}"
-                            }
-                        } else {
-                            remoteSuppressed++
-                        }
+                        if (allowed) remoteAllowed++ else remoteSuppressed++
 
-                        // An ACK for a different alarm must never suppress this target.
-                        if (!acknowledged.contains(target.id) && acknowledged.isNotEmpty() && !allowed) {
-                            violations += "foreign ACK suppressed exact alarm at op=$index id=${target.id}"
+                        if (allowed && acknowledged.contains(target.id)) {
+                            violations += "remote allowed for ACKed exact alarm at op=$index id=${target.id}"
                         }
                     }
                 }
@@ -129,7 +119,6 @@ object QaExactChaosRunner {
                             leaseStartedAt[target.id] = wallClock
                             leaseClaims++
 
-                            // Immediate duplicate receiver at the same clock instant must lose.
                             if (ExecutionLeasePolicy.canAcquire(false, wallClock, wallClock, LEASE_MS)) {
                                 violations += "duplicate receiver acquired active lease at op=$index id=${target.id}"
                             }
@@ -151,7 +140,6 @@ object QaExactChaosRunner {
                 }
 
                 7 -> {
-                    // Clock rollback while a lease is active must not create a duplicate owner.
                     if (leaseStartedAt.isNotEmpty()) {
                         val entry = leaseStartedAt.entries.elementAt(random.nextInt(leaseStartedAt.size))
                         val rolledBack = (entry.value - random.nextLong(1L, 60_000L)).coerceAtLeast(1L)
@@ -169,7 +157,6 @@ object QaExactChaosRunner {
                 }
 
                 8 -> {
-                    // Sensor replay ordering remains monotonic even while alarm wall clock is chaotic.
                     val candidate = if (random.nextBoolean()) {
                         latestSensorTs + random.nextLong(0L, 10L)
                     } else {
@@ -204,23 +191,22 @@ object QaExactChaosRunner {
                 }
 
                 10 -> {
-                    // Simulated process restart: exact ACK, completion and lease state are durable.
                     processRestarts++
-                    val ackHash = acknowledged.hashCode()
-                    val deliveredHash = delivered.hashCode()
-                    val leaseHash = leaseStartedAt.hashCode()
-                    if (acknowledged.hashCode() != ackHash || delivered.hashCode() != deliveredHash || leaseStartedAt.hashCode() != leaseHash) {
+                    val ackSnapshot = acknowledged.toSet()
+                    val deliveredSnapshot = delivered.toSet()
+                    val leaseSnapshot = leaseStartedAt.toMap()
+                    if (acknowledged != ackSnapshot || delivered != deliveredSnapshot || leaseStartedAt != leaseSnapshot) {
                         violations += "durable exact state changed across restart at op=$index"
                     }
                 }
 
                 else -> {
-                    // Delayed ACK of an old alarm must affect only that exact alarm ID.
                     if (alarms.size >= 2) {
                         val old = alarms[random.nextInt(alarms.size - 1)]
                         val newest = alarms.last()
+                        val newestWasAcknowledged = acknowledged.contains(newest.id)
                         acknowledged += old.id
-                        if (old.id != newest.id && acknowledged.contains(newest.id)) {
+                        if (!newestWasAcknowledged && old.id != newest.id && acknowledged.contains(newest.id)) {
                             violations += "delayed old ACK contaminated newest alarm at op=$index"
                         }
                     }
