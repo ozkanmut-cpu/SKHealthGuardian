@@ -11,6 +11,15 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         val alertId = intent.getStringExtra(EXTRA_ALERT_ID)
         val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
         val exact = AlertIdentity.isValid(alertId)
+        val deliveryIdentity = EscalationDeliveryState.identity(alertId.takeIf { exact }, alertTs)
+
+        if (EscalationDeliveryState.isDelivered(context, deliveryIdentity)) {
+            if (exact) EscalationScheduler.markConsumed(context, alertId!!, alertTs)
+            else if (alertTs > 0L) EscalationScheduler.markConsumed(context, alertTs)
+            AlarmTimelineStore.add(context, "ESCALATION TEKRAR ENGELLENDİ", "Aynı escalation daha önce tamamlandı")
+            return
+        }
+
         val shouldEscalate = if (exact) {
             !AlertAcknowledgementStore.isAcknowledged(context, alertId!!)
         } else {
@@ -53,6 +62,9 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
             if (callOk) break
         }
 
+        // Completion is persisted only after remote delivery attempts finish. If the process dies
+        // earlier, a later retry is safer than permanently losing the escalation.
+        EscalationDeliveryState.markDelivered(context, deliveryIdentity)
         if (exact) EscalationScheduler.markConsumed(context, alertId!!, alertTs)
         else EscalationScheduler.markConsumed(context, alertTs)
         AlarmTimelineStore.add(context, "ESCALATION", "Alarm yanıtlanmadı; tekrar SMS/arama çalıştırıldı, arama=${if (callOk) "başlatıldı" else "başarısız/yok"}")
