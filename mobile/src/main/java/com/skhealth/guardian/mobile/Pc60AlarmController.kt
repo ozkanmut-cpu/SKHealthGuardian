@@ -4,6 +4,7 @@ import android.content.Context
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.MonotonicTimestampGate
 import com.skhealth.guardian.shared.Pc60AlarmPolicy
 import com.skhealth.guardian.shared.Pc60Decision
 import com.skhealth.guardian.shared.Pc60HeartRatePolicy
@@ -14,8 +15,19 @@ class Pc60AlarmController(private val context: Context) {
     private var signature = ""
     private var policy = Pc60AlarmPolicy()
     private var hrPolicy = Pc60HeartRatePolicy()
+    private val sampleGate = MonotonicTimestampGate(Pc60StatusStore.load(context).lastPacketAt)
 
+    @Synchronized
     fun onSample(sample: Pc60Sample) {
+        if (!sampleGate.accept(sample.timestampMs)) {
+            AlarmTimelineStore.add(
+                context,
+                "PC-60FW STALE DROP",
+                "Gecikmiş paket yok sayıldı: sample=${sample.timestampMs}, son=${sampleGate.lastAccepted()}"
+            )
+            return
+        }
+
         refreshPolicyIfNeeded()
 
         val reading = sample.toHealthReading()
