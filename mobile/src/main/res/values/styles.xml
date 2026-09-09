@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="SKHealthGuardianTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">#0D1117</item>
+        <item name="android:colorAccent">#42A5F5</item>
+        <item name="android:navigationBarColor">#0D1117</item>
+        <item name="android:statusBarColor">#0D1117</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:alertDialogTheme">@style/SKHealthGuardianDialogTheme</item>
+    </style>
+
+    <style name="SKHealthGuardianDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">#171D24</item>
+        <item name="android:colorAccent">#42A5F5</item>
+        <item name="android:textColorPrimary">#F3F6F9</item>
+        <item name="android:textColorSecondary">#97A2AE</item>
+    </style>
+</resources>
