@@ -40,8 +40,7 @@ class SystemHealthActivity : Activity() {
             "Galaxy Watch veri akışı" to (lastReading > 0 && now - lastReading <= stale && heartbeat > 0 && now - heartbeat <= 3 * 60_000L)
         )
         val okCount = checks.count { it.second }
-        root.addView(UiStyle.title(this, "Sistem sağlığı"))
-        root.addView(UiStyle.subtitle(this, "İzinler, bağlantılar ve arka plan çalışma koşullarını tek ekrandan kontrol et."))
+        root.addView(UiStyle.detailHeader(this, "Sistem sağlığı", "İzinler, bağlantılar ve arka plan çalışma koşullarını tek ekrandan kontrol et."))
 
         val summary = UiStyle.card(this)
         val ready = okCount == checks.size
