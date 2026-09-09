@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
+import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.SequentialFailover
 import java.text.SimpleDateFormat
@@ -21,6 +22,7 @@ class AlertDispatcher(private val context: Context) {
     fun dispatch(alert: AlertEvent, recent: List<String>, reading: HealthReading? = null) {
         if (!AlertDeduplicator.shouldDispatch(context, alert)) return
 
+        val alertId = AlertIdentity.of(alert)
         val current = reading ?: alert.reading
         val contacts = ContactStore.contacts(context)
         val time = SimpleDateFormat("HH:mm:ss", Locale("tr", "TR")).format(Date(alert.timestampMs))
@@ -55,29 +57,30 @@ class AlertDispatcher(private val context: Context) {
 
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {
             action = "com.skhealth.guardian.mobile.SHOW_ALARM"
-            data = Uri.parse("skhealth://alarm/${alert.timestampMs}/${alert.type.name}")
+            data = Uri.parse("skhealth://alarm/id/${Uri.encode(alertId)}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(AlarmActivity.EXTRA_REASON, alert.message)
             putExtra(AlarmActivity.EXTRA_SPO2, current?.spo2 ?: -1)
             putExtra(AlarmActivity.EXTRA_HR, current?.heartRate ?: -1)
             putExtra(AlarmActivity.EXTRA_REMOTE_STATUS, remoteStatus)
+            putExtra(AlarmActivity.EXTRA_ALERT_ID, alertId)
             putExtra(AlarmActivity.EXTRA_ALERT_TS, alert.timestampMs)
         }
 
-        localNotification(alert, alarmIntent)
-        scheduleEscalation(alert)
+        localNotification(alarmIntent, alert)
+        scheduleEscalation(alertId, alert)
         runCatching { context.startActivity(alarmIntent) }
     }
 
-    private fun scheduleEscalation(alert: AlertEvent) {
+    private fun scheduleEscalation(alertId: String, alert: AlertEvent) {
         val minutes = AppSettings.escalationMinutes(context)
         if (minutes <= 0) return
         val dueAt = System.currentTimeMillis() + minutes * 60_000L
-        EscalationScheduler.schedule(context, alert.timestampMs, alert.message, dueAt)
+        EscalationScheduler.schedule(context, alertId, alert.timestampMs, alert.message, dueAt)
         AlarmTimelineStore.add(context, "ESCALATION PLANLANDI", "$minutes dk içinde alarm susturulmazsa tekrar iletişim kurulacak")
     }
 
-    private fun localNotification(alert: AlertEvent, alarmIntent: Intent) {
+    private fun localNotification(alarmIntent: Intent, alert: AlertEvent) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(context, 0, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
