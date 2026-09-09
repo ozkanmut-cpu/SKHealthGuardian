@@ -14,9 +14,14 @@ object HistoryStore {
     fun add(context: Context, r: HealthReading) {
         val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         val rows = (p.getString(KEY, "") ?: "").lineSequence().filter { it.isNotBlank() }.toMutableList()
-        rows += listOf(r.id, r.timestampMs, r.spo2 ?: "", r.heartRate ?: "", r.valid, r.source).joinToString("|")
+        rows += encode(r)
         while (rows.size > MAX) rows.removeAt(0)
         p.edit().putString(KEY, rows.joinToString("\n")).apply()
+    }
+
+    fun replace(context: Context, readings: List<HealthReading>) {
+        val rows = readings.takeLast(MAX).joinToString("\n", transform = ::encode)
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY, rows).apply()
     }
 
     fun contains(context: Context, id: String): Boolean {
@@ -61,4 +66,7 @@ object HistoryStore {
             "${df.format(Date(r.timestampMs))}  $value"
         }
     }
+
+    private fun encode(r: HealthReading): String =
+        listOf(r.id, r.timestampMs, r.spo2 ?: "", r.heartRate ?: "", r.valid, r.source).joinToString("|")
 }
