@@ -43,6 +43,15 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply { addView(root) }
         setContentView(scroll)
         root.addView(TextView(this).apply { text = "SK Health Guardian"; textSize = 24f })
+
+        val pc60 = Pc60StatusStore.load(this)
+        root.addView(TextView(this).apply {
+            text = "PC-60FW: ${pc60.state}" + if (pc60.packetCount > 0) " • ${pc60.packetCount} BLE paket" else ""
+            textSize = 16f
+            setPadding(0, 12, 0, 12)
+        })
+        root.addView(Button(this).apply { text = "PC-60FW Bluetooth oksimetre"; setOnClickListener { startActivity(Intent(this@MainActivity, Pc60Activity::class.java)) } })
+
         val spo2Critical = edit("Kritik SpO₂", cfg.spo2CriticalImmediate.toString())
         val spo2Low = edit("Düşük SpO₂", cfg.spo2LowThreshold.toString())
         val hrHigh = edit("Yüksek nabız", cfg.heartRateHighThreshold.toString())
@@ -125,7 +134,8 @@ class MainActivity : Activity() {
     }
 
     private fun requestPermissions() {
-        val wanted = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
+        val wanted = mutableListOf(Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
+        if (Build.VERSION.SDK_INT >= 31) wanted += Manifest.permission.BLUETOOTH_SCAN
         val missing = wanted.filterNot { has(it) }
         if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMISSIONS)
     }
