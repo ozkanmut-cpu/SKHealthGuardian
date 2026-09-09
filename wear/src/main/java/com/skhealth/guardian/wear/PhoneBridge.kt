@@ -5,6 +5,7 @@ import com.google.android.gms.wearable.Wearable
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.PendingAckPolicy
+import com.skhealth.guardian.shared.TechnicalAlertWireCodec
 
 class PhoneBridge(private val context: Context) {
     private val prefs = context.getSharedPreferences("phone_bridge_queue", Context.MODE_PRIVATE)
@@ -32,7 +33,7 @@ class PhoneBridge(private val context: Context) {
     }
 
     suspend fun sendAlert(alert: AlertEvent) {
-        val payload = encodeAlert(alert)
+        val payload = TechnicalAlertWireCodec.encode(alert)
         val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
         if (nodes.isEmpty()) {
             enqueueAlert(payload)
@@ -142,14 +143,6 @@ class PhoneBridge(private val context: Context) {
         reading.heartRate?.toString().orEmpty(),
         reading.valid.toString(),
         reading.source
-    ).joinToString("|")
-
-    private fun encodeAlert(alert: AlertEvent): String = listOf(
-        "v2",
-        alert.eventId,
-        alert.type.name,
-        alert.timestampMs.toString(),
-        sanitizeReason(alert.message)
     ).joinToString("|")
 
     @Synchronized
