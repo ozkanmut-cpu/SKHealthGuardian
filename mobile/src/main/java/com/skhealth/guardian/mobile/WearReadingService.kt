@@ -54,23 +54,29 @@ class WearReadingService : WearableListenerService() {
         val ageMs = (receivedAt - reading.timestampMs).coerceAtLeast(0L)
         if (ageMs > maxLiveAgeMs) return
 
-        // PC-60FW geçerli ve taze veri üretiyorsa SpO2 alarmı için ana kaynak odur.
-        // Saat ölçümü yine geçmişe ve güvenilirlik karşılaştırmasına girer ancak alarm motorunu tetiklemez.
-        if (reading.spo2 != null && SourcePriorityCoordinator.isPc60Authoritative(this, receivedAt)) {
+        val pc60OwnsSpo2 = reading.spo2 != null && SourcePriorityCoordinator.isPc60Authoritative(this, receivedAt)
+        val readingForAlarm = if (pc60OwnsSpo2) {
             AlarmTimelineStore.add(
                 this,
                 "KAYNAK ÖNCELİĞİ",
-                "Watch SpO₂ %${reading.spo2} karşılaştırma için kaydedildi; alarm kararı PC-60FW'ye bırakıldı"
+                "Watch SpO₂ %${reading.spo2} karşılaştırma için kaydedildi; SpO₂ alarm kararı PC-60FW'ye bırakıldı. Watch nabız alarmı aktif kalır."
             )
-            return
-        }
+            HealthReading(
+                id = reading.id,
+                timestampMs = reading.timestampMs,
+                spo2 = null,
+                heartRate = reading.heartRate,
+                valid = reading.valid,
+                source = reading.source
+            )
+        } else reading
 
         val e = if (engine == null || activeConfig != cfg) {
             activeConfig = cfg
             AlarmEngine(cfg).also { engine = it }
         } else engine!!
         val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
-        e.evaluate(reading).forEach { AlertDispatcher(this).dispatch(it, recent, reading) }
+        e.evaluate(readingForAlarm).forEach { AlertDispatcher(this).dispatch(it, recent, reading) }
     }
 
     companion object {
