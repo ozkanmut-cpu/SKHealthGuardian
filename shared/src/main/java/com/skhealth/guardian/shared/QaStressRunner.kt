@@ -105,7 +105,8 @@ object QaStressRunner {
         var alarms = 0
         var recovered = 0
         repeat(n) { i ->
-            // 5 dk normal, 2 dk düşük, 20 sn toparlanma; sonra döngü tekrarlanır.
+            // 5 dk normal, 121 sn düşük (alarm 120 sn'de tetiklenir), ardından normal dönem.
+            // Politika ALARM verdiğinde pending session'ı resetlediği için bu döngüde RECOVERED beklenmez.
             val cycle = i % 440
             val spo2 = when {
                 cycle < 300 -> 97
@@ -119,7 +120,7 @@ object QaStressRunner {
             }
         }
         val completedCycles = n / 440
-        Check(alarms in completedCycles..(completedCycles + 1) && recovered in completedCycles..(completedCycles + 1), "alarm=$alarms recovery=$recovered cycle≈$completedCycles")
+        Check(alarms in completedCycles..(completedCycles + 1) && recovered == 0, "alarm=$alarms cycle≈$completedCycles recovery=$recovered")
     }
 
     private fun deterministicFuzz(config: AlarmConfig, n: Int): QaStressResult = timed("deterministic-fuzz", "Deterministik fuzz", n) {
