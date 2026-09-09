@@ -91,15 +91,14 @@ class MonitorService : Service() {
                     val recoveredReference = if (lastValidReadingAt > 0) lastValidReadingAt else serviceStartedAt
                     if (System.currentTimeMillis() - recoveredReference > timeout && now - lastSensorFailureAlertAt > timeout) {
                         lastSensorFailureAlertAt = now
-                        LocalAlarm.raise(
-                            this@MonitorService,
-                            AlertEvent(
-                                AlertType.SENSOR_FAILURE,
-                                now,
-                                null,
-                                "Saat sensörü uzun süredir geçerli ölçüm üretemiyor"
-                            )
+                        val alert = AlertEvent(
+                            AlertType.SENSOR_FAILURE,
+                            now,
+                            null,
+                            "Saat sensörü uzun süredir geçerli ölçüm üretemiyor"
                         )
+                        LocalAlarm.raise(this@MonitorService, alert)
+                        runCatching { bridge.sendAlert(alert) }
                     }
                 }
             }
