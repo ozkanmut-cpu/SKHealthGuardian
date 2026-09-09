@@ -192,7 +192,10 @@ class MonitorService : Service() {
     }
 
     private suspend fun process(reading: HealthReading) {
-        if (reading.valid && (reading.spo2 != null || reading.heartRate != null)) lastValidReadingAt = reading.timestampMs
+        if (reading.valid && (reading.spo2 != null || reading.heartRate != null)) {
+            lastValidReadingAt = reading.timestampMs
+            WearStatusStore.update(this, reading)
+        }
         runCatching { bridge.send(reading) }
         val alerts = engine.evaluate(reading)
         if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
