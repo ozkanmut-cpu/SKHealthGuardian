@@ -7,11 +7,16 @@ import android.net.Uri
 import android.os.Bundle
 import android.telecom.TelecomManager
 import androidx.core.content.ContextCompat
+import com.skhealth.guardian.shared.AlertIdentity
+import com.skhealth.guardian.shared.RemoteDeliveryGate
 
 class CallPlacer(private val context: Context) {
-    fun call(number: String): Boolean {
+    fun call(number: String, alertTs: Long = 0L, alertId: String? = null): Boolean {
+        if (!mayDeliver(alertTs, alertId)) return false
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) return false
         return runCatching {
+            // Re-check at the last possible point before TelecomManager receives the call.
+            if (!mayDeliver(alertTs, alertId)) return@runCatching false
             val telecom = context.getSystemService(TelecomManager::class.java)
             telecom.placeCall(Uri.fromParts("tel", number, null), Bundle().apply {
                 putBoolean(TelecomManager.EXTRA_START_CALL_WITH_SPEAKERPHONE, false)
@@ -22,6 +27,14 @@ class CallPlacer(private val context: Context) {
                 .apply()
             true
         }.getOrDefault(false)
+    }
+
+    private fun mayDeliver(alertTs: Long, alertId: String?): Boolean {
+        return if (AlertIdentity.isValid(alertId)) {
+            !AlertAcknowledgementStore.isAcknowledged(context, alertId!!)
+        } else {
+            RemoteDeliveryGate.shouldDeliver(AlertAcknowledgementStore.lastAcknowledgedAt(context), alertTs)
+        }
     }
 
     private fun mask(number: String): String {
