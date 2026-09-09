@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.health.connect.HealthPermissions
 import android.os.Build
 import android.os.Bundle
 import android.widget.Button
@@ -52,8 +53,8 @@ class WatchSetupActivity : Activity() {
 
     private fun requestSensorPermissions() {
         val permissions = mutableListOf(
-            Manifest.permission.health.READ_HEART_RATE,
-            Manifest.permission.health.READ_OXYGEN_SATURATION
+            HealthPermissions.READ_HEART_RATE,
+            HealthPermissions.READ_OXYGEN_SATURATION
         )
         if (Build.VERSION.SDK_INT >= 33) permissions += Manifest.permission.POST_NOTIFICATIONS
         val missing = permissions.filterNot(::has)
@@ -62,10 +63,10 @@ class WatchSetupActivity : Activity() {
     }
 
     private fun requestBackgroundPermission() {
-        if (Build.VERSION.SDK_INT >= 36 && !has(Manifest.permission.health.READ_HEALTH_DATA_IN_BACKGROUND)) {
+        if (Build.VERSION.SDK_INT >= 36 && !has(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND)) {
             ActivityCompat.requestPermissions(
                 this,
-                arrayOf(Manifest.permission.health.READ_HEALTH_DATA_IN_BACKGROUND),
+                arrayOf(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND),
                 REQ_BACKGROUND
             )
         } else {
@@ -84,15 +85,15 @@ class WatchSetupActivity : Activity() {
     private fun startMonitoringIfReady() {
         refreshStatus()
         if (!hasSensorPermissions()) return
-        if (Build.VERSION.SDK_INT >= 36 && !has(Manifest.permission.health.READ_HEALTH_DATA_IN_BACKGROUND)) return
+        if (Build.VERSION.SDK_INT >= 36 && !has(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND)) return
         ContextCompat.startForegroundService(this, Intent(this, MonitorService::class.java))
         status.append("\n✓ İzleme servisi başlatıldı")
     }
 
     private fun refreshStatus() {
-        val hr = has(Manifest.permission.health.READ_HEART_RATE)
-        val spo2 = has(Manifest.permission.health.READ_OXYGEN_SATURATION)
-        val background = Build.VERSION.SDK_INT < 36 || has(Manifest.permission.health.READ_HEALTH_DATA_IN_BACKGROUND)
+        val hr = has(HealthPermissions.READ_HEART_RATE)
+        val spo2 = has(HealthPermissions.READ_OXYGEN_SATURATION)
+        val background = Build.VERSION.SDK_INT < 36 || has(HealthPermissions.READ_HEALTH_DATA_IN_BACKGROUND)
         val notifications = Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS)
         status.text = buildString {
             append(if (hr) "✓" else "✗").append(" Nabız izni\n")
@@ -103,7 +104,7 @@ class WatchSetupActivity : Activity() {
     }
 
     private fun hasSensorPermissions(): Boolean =
-        has(Manifest.permission.health.READ_HEART_RATE) && has(Manifest.permission.health.READ_OXYGEN_SATURATION)
+        has(HealthPermissions.READ_HEART_RATE) && has(HealthPermissions.READ_OXYGEN_SATURATION)
 
     private fun has(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
