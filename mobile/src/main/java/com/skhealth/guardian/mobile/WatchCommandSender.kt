@@ -18,7 +18,11 @@ class WatchCommandSender(private val context: Context) {
             config.heartRateLowEnabled,
             config.heartRateLowThreshold,
             config.heartRateLowConfirmCount,
-            config.staleDataMs
+            config.staleDataMs,
+            AppSettings.watchMeasurementMinutes(context),
+            AppSettings.watchConfirmMinutes(context),
+            AppSettings.watchRetry1Seconds(context),
+            AppSettings.watchRetry2Seconds(context)
         ).joinToString("|").toByteArray()
         send("/health/config", payload)
     }
