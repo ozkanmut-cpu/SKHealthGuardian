@@ -44,15 +44,37 @@ class Pc60Activity : Activity() {
 
         val s = Pc60StatusStore.load(this)
         val last = if (s.lastPacketAt == 0L) "yok" else SimpleDateFormat("HH:mm:ss", Locale("tr", "TR")).format(Date(s.lastPacketAt))
+        val battery = s.batteryLevel?.let { level ->
+            when (level) {
+                0 -> "0–25%"
+                1 -> "25–50%"
+                2 -> "50–75%"
+                3 -> "75–100%"
+                else -> level.toString()
+            }
+        } ?: "—"
 
         root.addView(TextView(this).apply { text = "PC-60FW Bluetooth Oksimetre"; textSize = 24f })
         root.addView(TextView(this).apply {
-            text = "Durum: ${s.state}\nCihaz: ${s.deviceName.ifBlank { "—" }}\nAdres: ${s.address.ifBlank { "—" }}\nSon BLE paketi: $last\nPaket sayısı: ${s.packetCount}\nSon ham paket: ${s.lastPacketHex.ifBlank { "—" }}"
+            text = buildString {
+                append("Durum: ${s.state}\n")
+                append("Cihaz: ${s.deviceName.ifBlank { "—" }}\n")
+                append("Adres: ${s.address.ifBlank { "—" }}\n")
+                append("SpO₂: ${s.spo2?.let { "%$it" } ?: "—"}\n")
+                append("Nabız: ${s.heartRate?.let { "$it bpm" } ?: "—"}\n")
+                append("PI: ${s.perfusionIndex?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—"}\n")
+                append("Pil: $battery\n")
+                append("Probe off: ${if (s.probeOff) "EVET" else "hayır"}\n")
+                append("Pulse searching: ${if (s.pulseSearching) "EVET" else "hayır"}\n")
+                append("Son veri: $last\n")
+                append("Paket/örnek sayısı: ${s.packetCount}\n")
+                if (s.lastPacketHex.isNotBlank()) append("Ham paket: ${s.lastPacketHex}")
+            }
             textSize = 17f
             setPadding(0, 24, 0, 24)
         })
         root.addView(TextView(this).apply {
-            text = "Bu ekranda şu an ham BLE bağlantısını doğruluyoruz. SpO₂ / nabız / PI değerlerini alarm sistemine vermek için üretici PC-60FW veri parserı bir sonraki katmanda etkinleştirilecek."
+            text = "Lepu SDK AAR yüklüyse üreticinin RtParam verileri doğrudan Guardian alarm zincirine gider. AAR yoksa ekran ham BLE teşhis modunda çalışır."
         })
         root.addView(Button(this).apply {
             text = "Bağlan / izlemeyi başlat"
@@ -74,10 +96,7 @@ class Pc60Activity : Activity() {
                 )
             }
         })
-        root.addView(Button(this).apply {
-            text = "Durumu yenile"
-            setOnClickListener { render() }
-        })
+        root.addView(Button(this).apply { text = "Durumu yenile"; setOnClickListener { render() } })
         root.addView(Button(this).apply {
             text = "PC-60FW izlemeyi durdur"
             setOnClickListener { stopService(Intent(this@Pc60Activity, Pc60BleService::class.java)); render() }
