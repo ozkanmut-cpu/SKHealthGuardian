@@ -9,6 +9,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.SequentialFailover
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,14 +38,13 @@ class AlertDispatcher(private val context: Context) {
         }
         val smsQueued = smsResults.isNotEmpty() && smsResults.all { it }
 
-        var callOk = false
-        var callTarget: EmergencyContact? = null
-        for (candidate in contacts.filter { it.callEnabled }) {
+        val callTarget = SequentialFailover.firstSuccessful(contacts.filter { it.callEnabled }) { candidate ->
             val ok = caller.call(candidate.phoneNumber)
             DeliveryLogStore.add(context, "ARAMA", mask(candidate.phoneNumber), ok, if (ok) "arama başlatıldı" else "arama başlatılamadı; sıradaki kişi denenecek")
             AlarmTimelineStore.add(context, "ARAMA", "${mask(candidate.phoneNumber)} ${if (ok) "başlatıldı" else "başlatılamadı"}")
-            if (ok) { callOk = true; callTarget = candidate; break }
+            ok
         }
+        val callOk = callTarget != null
 
         val remoteStatus = buildString {
             append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsQueued) "SMS kuyruğa alındı; gönderim sonucu loglanacak" else "SMS kuyruğa alınamadı")
