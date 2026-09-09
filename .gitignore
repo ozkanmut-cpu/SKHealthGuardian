@@ -1,0 +1,14 @@
+# Gradle / Android
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Proprietary / vendor SDK binaries
+mobile/libs/*.aar
+wear/libs/*.aar
+
+# Local artifacts
+*.apk
+*.aab
