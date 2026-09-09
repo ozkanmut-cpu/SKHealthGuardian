@@ -14,11 +14,15 @@ object WearStatusStore {
 
     fun update(context: Context, reading: HealthReading) {
         if (!reading.valid) return
+        val spo2 = reading.spo2
+        val heartRate = reading.heartRate
+        if (spo2 == null && heartRate == null) return
+
         val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         val e = p.edit()
-        if (reading.spo2 != null) e.putInt("spo2", reading.spo2)
-        if (reading.heartRate != null) e.putInt("hr", reading.heartRate)
-        if (reading.spo2 != null || reading.heartRate != null) e.putLong("ts", reading.timestampMs)
+        spo2?.let { e.putInt("spo2", it) }
+        heartRate?.let { e.putInt("hr", it) }
+        e.putLong("ts", reading.timestampMs)
         e.apply()
     }
 
