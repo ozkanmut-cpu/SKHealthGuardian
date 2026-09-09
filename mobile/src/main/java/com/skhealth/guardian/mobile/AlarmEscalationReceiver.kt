@@ -10,6 +10,7 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
         if (!EscalationGate.shouldEscalate(AlertAcknowledgementStore.lastAcknowledgedAt(context), alertTs)) {
             if (alertTs > 0L) {
+                EscalationScheduler.cancel(context, alertTs)
                 AlarmTimelineStore.add(context, "ESCALATION İPTAL", "Alarm kullanıcı tarafından susturulmuş/onaylanmış")
             }
             return
@@ -32,6 +33,7 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
             DeliveryLogStore.add(context, "ARAMA ESCALATION", mask(c.phoneNumber), callOk, if (callOk) "tekrar arama başlatıldı" else "başlatılamadı")
             if (callOk) break
         }
+        EscalationScheduler.markConsumed(context, alertTs)
         AlarmTimelineStore.add(context, "ESCALATION", "Alarm yanıtlanmadı; tekrar SMS/arama çalıştırıldı, arama=${if (callOk) "başlatıldı" else "başarısız/yok"}")
     }
 
