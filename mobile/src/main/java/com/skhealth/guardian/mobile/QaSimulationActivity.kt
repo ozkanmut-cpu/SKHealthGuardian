@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.skhealth.guardian.shared.QaChaosRunner
 import com.skhealth.guardian.shared.QaScenarioRunner
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -19,11 +20,11 @@ class QaSimulationActivity : Activity() {
         super.onCreate(savedInstanceState)
         UiStyle.applyBars(this)
         val root = UiStyle.page(this)
-        root.addView(UiStyle.detailHeader(this, "QA simülasyon modu", "Alarm motorunu ve gerçek Android veri katmanını güvenli stres testleriyle doğrular."))
+        root.addView(UiStyle.detailHeader(this, "QA simülasyon modu", "Alarm motorunu, Android veri katmanını ve tam alarm zincirini güvenli stres testleriyle doğrular."))
 
         val info = UiStyle.card(this)
         info.addView(UiStyle.text(this, "Güvenli test", 18f, UiStyle.TEXT, true))
-        info.addView(UiStyle.text(this, "Otomatik testler gerçek üretim sınıflarını çalıştırır ancak SMS, arama, BLE komutu veya uzak alarm göndermez. Android stres testleri mevcut geçmiş ve timeline verisini geçici olarak yedekleyip test sonunda geri yükler.", 14f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@QaSimulationActivity, 8), 0, 0) })
+        info.addView(UiStyle.text(this, "Otomatik testler gerçek üretim kurallarını çalıştırır ancak SMS, arama, BLE komutu veya uzak alarm göndermez. Android stres testleri mevcut geçmiş ve timeline verisini geçici olarak yedekleyip test sonunda geri yükler. Chaos testi replay, ACK, escalation, retry, process restart ve kaynak geçişlerini aynı akışta zorlar.", 14f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@QaSimulationActivity, 8), 0, 0) })
         root.addView(info)
 
         val summaryCard = UiStyle.card(this)
@@ -36,6 +37,7 @@ class QaSimulationActivity : Activity() {
         root.addView(resultsRoot, UiStyle.sectionParams(this))
 
         root.addView(UiStyle.button(this, "8 güvenli alarm senaryosunu çalıştır").apply { setOnClickListener { runAll() } })
+        root.addView(UiStyle.button(this, "Tam zincir CHAOS • 500 bin olay", false).apply { setOnClickListener { runChaos() } })
         root.addView(UiStyle.button(this, "Android stres testi • standart", false).apply { setOnClickListener { runAndroidStress(false) } })
         root.addView(UiStyle.button(this, "Android stres testi • AĞIR", false).apply { setOnClickListener { runAndroidStress(true) } })
         root.addView(UiStyle.button(this, "Örnek alarm ekranını aç", false).apply { setOnClickListener { previewAlarm() } })
@@ -71,6 +73,39 @@ class QaSimulationActivity : Activity() {
         val failed = results.filterNot { it.passed }.joinToString { it.id }
         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale("tr", "TR")).format(Date())
         AlarmTimelineStore.add(this, "QA SİMÜLASYON", "$stamp • $passed/${results.size} başarılı" + if (failed.isBlank()) "" else " • başarısız=$failed")
+    }
+
+    private fun runChaos() {
+        summary.setTextColor(UiStyle.BLUE)
+        summary.text = "TAM ZİNCİR CHAOS ÇALIŞIYOR…"
+        clearResults()
+        resultsRoot.addView(UiStyle.text(this, "500.000 deterministik olay: replay, sensör sıralaması, alarm, ACK, SMS retry, escalation, source flap ve process restart.", 13f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@QaSimulationActivity, 12), 0, 0) })
+
+        Thread {
+            val report = QaChaosRunner.run(operations = 500_000, seed = 20260909)
+            runOnUiThread {
+                clearResults()
+                val rows = listOf(
+                    "Reading kabul" to report.acceptedReadings,
+                    "Replay/duplicate engellendi" to report.duplicateReadingsRejected,
+                    "Remote aksiyon izin" to report.remoteActionsAllowed,
+                    "ACK sonrası remote engellendi" to report.remoteActionsSuppressedAfterAck,
+                    "Process restart" to report.processRestarts,
+                    "Kaynak flap" to report.sourceFlaps
+                )
+                rows.forEachIndexed { index, row ->
+                    if (index > 0) resultsRoot.addView(UiStyle.divider(this))
+                    resultsRoot.addView(UiStyle.text(this, "${row.first}: ${row.second}", 14f, UiStyle.TEXT).apply { setPadding(0, UiStyle.dp(this@QaSimulationActivity, 10), 0, UiStyle.dp(this@QaSimulationActivity, 10)) })
+                }
+                if (report.violations.isNotEmpty()) {
+                    resultsRoot.addView(UiStyle.divider(this))
+                    resultsRoot.addView(UiStyle.text(this, report.violations.take(10).joinToString("\n"), 12.5f, UiStyle.RED).apply { setPadding(0, UiStyle.dp(this@QaSimulationActivity, 10), 0, 0) })
+                }
+                summary.setTextColor(if (report.passed) UiStyle.GREEN else UiStyle.RED)
+                summary.text = if (report.passed) "✓ CHAOS TESTİ BAŞARILI\n${report.operations} olay • seed=${report.seed}" else "✗ CHAOS TESTİ HATALI\n${report.violations.size} invariant ihlali"
+                AlarmTimelineStore.add(this, "QA CHAOS", "passed=${report.passed} • ops=${report.operations} • seed=${report.seed} • violations=${report.violations.size}")
+            }
+        }.start()
     }
 
     private fun runAndroidStress(heavy: Boolean) {
