@@ -51,6 +51,7 @@ class MainActivity : Activity() {
             setPadding(0, 12, 0, 12)
         })
         root.addView(Button(this).apply { text = "PC-60FW Bluetooth oksimetre"; setOnClickListener { startActivity(Intent(this@MainActivity, Pc60Activity::class.java)) } })
+        root.addView(Button(this).apply { text = "Ölçüm ve alarm ayarları"; setOnClickListener { startActivity(Intent(this@MainActivity, MeasurementSettingsActivity::class.java)) } })
 
         val spo2Critical = edit("Kritik SpO₂", cfg.spo2CriticalImmediate.toString())
         val spo2Low = edit("Düşük SpO₂", cfg.spo2LowThreshold.toString())
