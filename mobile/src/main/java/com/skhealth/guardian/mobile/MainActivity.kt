@@ -51,17 +51,22 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply { text = "Saat self-test gönder"; setOnClickListener { sendSelfTest() } })
         root.addView(Button(this).apply { text = "Self-test durumu"; setOnClickListener { showStatus() } })
         root.addView(Button(this).apply { text = "Sistem sağlık kontrolü"; setOnClickListener { startActivity(Intent(this@MainActivity, SystemHealthActivity::class.java)) } })
+        root.addView(Button(this).apply { text = "SMS / arama kayıtları"; setOnClickListener { startActivity(Intent(this@MainActivity, DeliveryLogActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Ölçüm geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, HistoryActivity::class.java)) } })
     }
 
     private fun testSms() {
         val c = ContactStore.contacts(this).firstOrNull { it.smsEnabled } ?: return toast("SMS kişisi tanımlı değil")
-        toast(if (SmsSender(this).send(c.phoneNumber, "SK Health Guardian TEST SMS - sistem zinciri testidir.")) "SMS gönderildi" else "SMS gönderilemedi / izin yok")
+        val ok = SmsSender(this).send(c.phoneNumber, "SK Health Guardian TEST SMS - sistem zinciri testidir.")
+        DeliveryLogStore.add(this, "SMS TEST", "***${c.phoneNumber.takeLast(4)}", ok, if (ok) "test gönderim isteği kabul edildi" else "test gönderilemedi / izin yok")
+        toast(if (ok) "SMS gönderildi" else "SMS gönderilemedi / izin yok")
     }
 
     private fun testCall() {
         val c = ContactStore.contacts(this).firstOrNull { it.callEnabled } ?: return toast("Aranacak kişi tanımlı değil")
-        toast(if (CallPlacer(this).call(c.phoneNumber)) "Arama başlatıldı" else "Arama başlatılamadı / izin yok")
+        val ok = CallPlacer(this).call(c.phoneNumber)
+        DeliveryLogStore.add(this, "ARAMA TEST", "***${c.phoneNumber.takeLast(4)}", ok, if (ok) "test araması başlatıldı" else "test araması başlatılamadı / izin yok")
+        toast(if (ok) "Arama başlatıldı" else "Arama başlatılamadı / izin yok")
     }
 
     private fun sendSelfTest() {
