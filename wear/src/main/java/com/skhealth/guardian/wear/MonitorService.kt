@@ -100,15 +100,13 @@ class MonitorService : Service() {
         try {
             val triggerAt = System.currentTimeMillis()
 
-            // Always collect the first HR and first SpO2 before waiting for any confirmation.
-            // This prevents a high-HR confirmation delay from postponing detection of critical SpO2.
             val hr = measureHeartRateWithRetry()
-            if (hr != null) process(HealthReading(System.currentTimeMillis(), heartRate = hr))
-            else process(HealthReading(System.currentTimeMillis(), valid = false))
+            if (hr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = hr))
+            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
 
             val spo2 = measureSpO2WithRetry()
-            if (spo2 != null) process(HealthReading(System.currentTimeMillis(), spo2 = spo2))
-            else process(HealthReading(System.currentTimeMillis(), valid = false))
+            if (spo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = spo2))
+            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
 
             val confirmHr = hr != null && hr > activeConfig.heartRateHighThreshold
             val confirmSpo2 = spo2 != null &&
@@ -131,13 +129,13 @@ class MonitorService : Service() {
 
         if (confirmHr) {
             val secondHr = runCatching { sensor.measureHeartRate() }.getOrNull()
-            if (secondHr != null) process(HealthReading(System.currentTimeMillis(), heartRate = secondHr))
+            if (secondHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = secondHr))
             else retryHr = true
         }
 
         if (confirmSpo2) {
             val secondSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
-            if (secondSpo2 != null) process(HealthReading(System.currentTimeMillis(), spo2 = secondSpo2))
+            if (secondSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = secondSpo2))
             else retrySpo2 = true
         }
 
@@ -148,14 +146,14 @@ class MonitorService : Service() {
 
         if (retryHr) {
             val finalHr = runCatching { sensor.measureHeartRate() }.getOrNull()
-            if (finalHr != null) process(HealthReading(System.currentTimeMillis(), heartRate = finalHr))
-            else process(HealthReading(System.currentTimeMillis(), valid = false))
+            if (finalHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = finalHr))
+            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
         }
 
         if (retrySpo2) {
             val finalSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
-            if (finalSpo2 != null) process(HealthReading(System.currentTimeMillis(), spo2 = finalSpo2))
-            else process(HealthReading(System.currentTimeMillis(), valid = false))
+            if (finalSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = finalSpo2))
+            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
         }
     }
 
