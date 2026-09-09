@@ -13,8 +13,8 @@ android {
         applicationId = "com.skhealth.guardian.wear"
         minSdk = 30
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6.0"
+        versionCode = 8
+        versionName = "0.8.0"
         buildConfigField("boolean", "HAS_SAMSUNG_SDK", samsungAar.exists().toString())
     }
     buildFeatures { buildConfig = true }
