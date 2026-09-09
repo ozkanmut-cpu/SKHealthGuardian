@@ -29,13 +29,14 @@ object QaChaosRunner {
         val random = Random(seed)
         val violations = mutableListOf<String>()
         val seenReadingIds = HashSet<String>()
-        val sensorGate = MonotonicTimestampGate()
+        val initialSensorTs = 1_000_000L
+        val sensorGate = MonotonicTimestampGate(initialSensorTs)
         val alertHistory = ArrayList<Long>()
 
         var ackWatermark = 0L
         var latestAlertTs = 0L
         var nextAlertTs = 1_000_000L
-        var latestSensorTs = 1_000_000L
+        var latestSensorTs = initialSensorTs
         var acceptedReadings = 0
         var duplicateRejected = 0
         var remoteAllowed = 0
@@ -75,9 +76,6 @@ object QaChaosRunner {
                 }
 
                 4 -> {
-                    // ACKs can only identify alarms that were actually emitted. Selecting from the
-                    // real alert history models delayed/replayed acknowledgements without inventing
-                    // timestamps that never belonged to an alarm.
                     if (alertHistory.isNotEmpty()) {
                         val candidate = if (random.nextBoolean()) {
                             latestAlertTs
@@ -89,8 +87,6 @@ object QaChaosRunner {
                 }
 
                 5, 6 -> {
-                    // Retry/escalation/call-failover also belongs to a real alarm identity. Most
-                    // traffic targets the latest alarm; some deliberately replays an older alarm.
                     val targetAlert = when {
                         alertHistory.isEmpty() -> 0L
                         random.nextInt(4) == 0 -> alertHistory[random.nextInt(alertHistory.size)]
