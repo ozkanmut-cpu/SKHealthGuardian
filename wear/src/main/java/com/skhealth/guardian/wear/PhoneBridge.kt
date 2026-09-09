@@ -9,6 +9,7 @@ class PhoneBridge(private val context: Context) {
 
     suspend fun send(reading: HealthReading) {
         val payload = encode(reading)
+        val bytes = payload.toByteArray()
         val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
         if (nodes.isEmpty()) {
             enqueue(payload)
@@ -17,7 +18,11 @@ class PhoneBridge(private val context: Context) {
 
         flushQueued(nodes.map { it.id })
         val ok = nodes.all { node ->
-            runCatching { Wearable.getMessageClient(context).sendMessage(node.id, "/health/reading", payload).awaitCompat() }.isSuccess
+            runCatching {
+                Wearable.getMessageClient(context)
+                    .sendMessage(node.id, "/health/reading", bytes)
+                    .awaitCompat()
+            }.isSuccess
         }
         if (!ok) enqueue(payload)
     }
