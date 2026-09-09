@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
@@ -62,7 +63,10 @@ class AlarmActivity : Activity() {
 
         root.addView(Button(this).apply {
             text = "Alarmı sustur"
-            setOnClickListener { finish() }
+            setOnClickListener {
+                getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
+                finish()
+            }
         })
         root.addView(Button(this).apply {
             text = "Tekrar ölç"
@@ -94,5 +98,6 @@ class AlarmActivity : Activity() {
         const val EXTRA_SPO2 = "spo2"
         const val EXTRA_HR = "hr"
         const val EXTRA_REMOTE_STATUS = "remote_status"
+        const val CRITICAL_NOTIFICATION_ID = 100
     }
 }
