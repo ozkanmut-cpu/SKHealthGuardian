@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.content.Context
+import com.skhealth.guardian.shared.ExecutionLeasePolicy
 
 /**
  * Persistent completion + execution lease for escalation delivery.
@@ -30,15 +31,11 @@ object EscalationDeliveryState {
         nowMs: Long = System.currentTimeMillis(),
         leaseMs: Long = DEFAULT_LEASE_MS
     ): Boolean = synchronized(this) {
-        if (identity.isBlank() || nowMs <= 0L || leaseMs <= 0L) return@synchronized false
+        if (identity.isBlank()) return@synchronized false
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        if (prefs.contains(DONE_PREFIX + identity)) return@synchronized false
-
+        val delivered = prefs.contains(DONE_PREFIX + identity)
         val existing = prefs.getLong(LEASE_PREFIX + identity, 0L)
-        // Future lease timestamps are considered active too; this is safer under wall-clock rollback.
-        val active = existing > 0L && (existing > nowMs || nowMs - existing < leaseMs)
-        if (active) return@synchronized false
-
+        if (!ExecutionLeasePolicy.canAcquire(delivered, existing, nowMs, leaseMs)) return@synchronized false
         prefs.edit().putLong(LEASE_PREFIX + identity, nowMs).commit()
     }
 
