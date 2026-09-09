@@ -3,13 +3,15 @@ package com.skhealth.guardian.mobile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.skhealth.guardian.shared.EscalationGate
 
 class AlarmEscalationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
-        if (alertTs <= 0L) return
-        if (AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) {
-            AlarmTimelineStore.add(context, "ESCALATION İPTAL", "Alarm kullanıcı tarafından susturulmuş/onaylanmış")
+        if (!EscalationGate.shouldEscalate(AlertAcknowledgementStore.lastAcknowledgedAt(context), alertTs)) {
+            if (alertTs > 0L) {
+                AlarmTimelineStore.add(context, "ESCALATION İPTAL", "Alarm kullanıcı tarafından susturulmuş/onaylanmış")
+            }
             return
         }
 
