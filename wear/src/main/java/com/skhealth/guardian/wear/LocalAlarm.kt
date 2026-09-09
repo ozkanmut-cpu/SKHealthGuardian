@@ -9,10 +9,12 @@ import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 
 object LocalAlarm {
+    private const val NOTIFICATION_ID = 99
+
     fun raise(context: Context, alert: AlertEvent) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
-        nm.notify(99, NotificationCompat.Builder(context, "critical")
+        nm.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, "critical")
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("KRİTİK SAĞLIK UYARISI")
             .setContentText(alert.message)
@@ -20,5 +22,10 @@ object LocalAlarm {
             .setOngoing(true).build())
         (context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
             .vibrate(VibrationEffect.createWaveform(longArrayOf(0,700,300,700,300,1200), 1))
+    }
+
+    fun cancel(context: Context) {
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+        (context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator).cancel()
     }
 }
