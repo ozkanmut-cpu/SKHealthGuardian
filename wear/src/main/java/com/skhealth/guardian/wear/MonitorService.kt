@@ -98,24 +98,70 @@ class MonitorService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "skhealth:measurement")
         wake.acquire(12 * 60_000L)
         try {
+            val triggerAt = System.currentTimeMillis()
+
+            // Always collect the first HR and first SpO2 before waiting for any confirmation.
+            // This prevents a high-HR confirmation delay from postponing detection of critical SpO2.
             val hr = measureHeartRateWithRetry()
-            if (hr != null) {
-                process(HealthReading(System.currentTimeMillis(), heartRate = hr))
-                if (hr > activeConfig.heartRateHighThreshold) confirmHighHeartRate()
-            } else {
-                process(HealthReading(System.currentTimeMillis(), valid = false))
-            }
+            if (hr != null) process(HealthReading(System.currentTimeMillis(), heartRate = hr))
+            else process(HealthReading(System.currentTimeMillis(), valid = false))
 
             val spo2 = measureSpO2WithRetry()
-            if (spo2 != null) {
-                process(HealthReading(System.currentTimeMillis(), spo2 = spo2))
-                if (spo2 >= activeConfig.spo2CriticalImmediate && spo2 < activeConfig.spo2LowThreshold) confirmLowSpO2()
-            } else {
-                process(HealthReading(System.currentTimeMillis(), valid = false))
+            if (spo2 != null) process(HealthReading(System.currentTimeMillis(), spo2 = spo2))
+            else process(HealthReading(System.currentTimeMillis(), valid = false))
+
+            val confirmHr = hr != null && hr > activeConfig.heartRateHighThreshold
+            val confirmSpo2 = spo2 != null &&
+                spo2 >= activeConfig.spo2CriticalImmediate &&
+                spo2 < activeConfig.spo2LowThreshold
+
+            if (confirmHr || confirmSpo2) {
+                confirmTriggeredReadings(triggerAt, confirmHr, confirmSpo2)
             }
         } finally {
             if (wake.isHeld) wake.release()
         }
+    }
+
+    private suspend fun confirmTriggeredReadings(triggerAt: Long, confirmHr: Boolean, confirmSpo2: Boolean) {
+        delayUntil(triggerAt + CONFIRM_DELAY_MS)
+
+        var retryHr = false
+        var retrySpo2 = false
+
+        if (confirmHr) {
+            val secondHr = runCatching { sensor.measureHeartRate() }.getOrNull()
+            if (secondHr != null) process(HealthReading(System.currentTimeMillis(), heartRate = secondHr))
+            else retryHr = true
+        }
+
+        if (confirmSpo2) {
+            val secondSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
+            if (secondSpo2 != null) process(HealthReading(System.currentTimeMillis(), spo2 = secondSpo2))
+            else retrySpo2 = true
+        }
+
+        if (!retryHr && !retrySpo2) return
+
+        runCatching { sensor.reconnect() }
+        delayUntil(triggerAt + FINAL_RETRY_AT_MS)
+
+        if (retryHr) {
+            val finalHr = runCatching { sensor.measureHeartRate() }.getOrNull()
+            if (finalHr != null) process(HealthReading(System.currentTimeMillis(), heartRate = finalHr))
+            else process(HealthReading(System.currentTimeMillis(), valid = false))
+        }
+
+        if (retrySpo2) {
+            val finalSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
+            if (finalSpo2 != null) process(HealthReading(System.currentTimeMillis(), spo2 = finalSpo2))
+            else process(HealthReading(System.currentTimeMillis(), valid = false))
+        }
+    }
+
+    private suspend fun delayUntil(targetMs: Long) {
+        val remaining = targetMs - System.currentTimeMillis()
+        if (remaining > 0) delay(remaining)
     }
 
     private suspend fun measureHeartRateWithRetry(): Int? {
@@ -127,40 +173,6 @@ class MonitorService : Service() {
             runCatching { sensor.reconnect() }
         }
         return null
-    }
-
-    private suspend fun confirmHighHeartRate() {
-        delay(2 * 60_000L)
-        val second = runCatching { sensor.measureHeartRate() }.getOrNull()
-        if (second != null) {
-            process(HealthReading(System.currentTimeMillis(), heartRate = second))
-            return
-        }
-        runCatching { sensor.reconnect() }
-        delay(60_000L)
-        val third = runCatching { sensor.measureHeartRate() }.getOrNull()
-        if (third != null) process(HealthReading(System.currentTimeMillis(), heartRate = third))
-        else {
-            runCatching { sensor.reconnect() }
-            process(HealthReading(System.currentTimeMillis(), valid = false))
-        }
-    }
-
-    private suspend fun confirmLowSpO2() {
-        delay(2 * 60_000L)
-        val second = runCatching { sensor.measureSpO2() }.getOrNull()
-        if (second != null) {
-            process(HealthReading(System.currentTimeMillis(), spo2 = second))
-            return
-        }
-        runCatching { sensor.reconnect() }
-        delay(60_000L)
-        val third = runCatching { sensor.measureSpO2() }.getOrNull()
-        if (third != null) process(HealthReading(System.currentTimeMillis(), spo2 = third))
-        else {
-            runCatching { sensor.reconnect() }
-            process(HealthReading(System.currentTimeMillis(), valid = false))
-        }
     }
 
     private suspend fun measureSpO2WithRetry(): Int? {
@@ -200,5 +212,7 @@ class MonitorService : Service() {
         const val ACTION_MEASURE_NOW = "com.skhealth.guardian.wear.MEASURE_NOW"
         private const val INTERVAL_MS = 5 * 60_000L
         private const val MIN_SENSOR_STALE_MS = 10 * 60_000L
+        private const val CONFIRM_DELAY_MS = 2 * 60_000L
+        private const val FINAL_RETRY_AT_MS = 3 * 60_000L
     }
 }
