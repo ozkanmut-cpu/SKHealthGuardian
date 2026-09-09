@@ -25,6 +25,13 @@ class AlertDispatcher(private val context: Context) {
         val history = if (recent.isEmpty()) "" else recent.takeLast(4).joinToString("\n", prefix="\nSon ölçümler:\n")
         val text = "KRİTİK SAĞLIK UYARISI\n${alert.message}\nSaat: $time$history"
 
+        AlarmTimelineStore.add(
+            context,
+            "ALARM",
+            "${alert.message}; SpO₂=${current?.spo2 ?: "—"}; HR=${current?.heartRate ?: "—"}",
+            alert.timestampMs
+        )
+
         val smsTargets = contacts.filter { it.smsEnabled }
         val smsResults = smsTargets.map { contact ->
             val ok = sms.send(contact.phoneNumber, text)
@@ -35,21 +42,35 @@ class AlertDispatcher(private val context: Context) {
                 ok,
                 if (ok) "modem gönderim kuyruğuna alındı; sonuç bekleniyor" else "kuyruğa alınamadı / izin yok"
             )
+            AlarmTimelineStore.add(context, "SMS", "${mask(contact.phoneNumber)} ${if (ok) "kuyruğa alındı" else "başlatılamadı"}")
             ok
         }
         val smsQueued = smsResults.isNotEmpty() && smsResults.all { it }
 
-        val callTarget = contacts.firstOrNull { it.callEnabled }
-        val callOk = callTarget?.let {
-            val ok = caller.call(it.phoneNumber)
-            DeliveryLogStore.add(context, "ARAMA", mask(it.phoneNumber), ok, if (ok) "arama başlatıldı" else "arama başlatılamadı / izin yok")
-            ok
-        } ?: false
+        var callOk = false
+        var callTarget: EmergencyContact? = null
+        for (candidate in contacts.filter { it.callEnabled }) {
+            val ok = caller.call(candidate.phoneNumber)
+            DeliveryLogStore.add(
+                context,
+                "ARAMA",
+                mask(candidate.phoneNumber),
+                ok,
+                if (ok) "arama başlatıldı" else "arama başlatılamadı; sıradaki kişi denenecek"
+            )
+            AlarmTimelineStore.add(context, "ARAMA", "${mask(candidate.phoneNumber)} ${if (ok) "başlatıldı" else "başlatılamadı"}")
+            if (ok) {
+                callOk = true
+                callTarget = candidate
+                break
+            }
+        }
 
         val remoteStatus = buildString {
             append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsQueued) "SMS kuyruğa alındı; gönderim sonucu loglanacak" else "SMS kuyruğa alınamadı")
             append(" • ")
-            append(if (callTarget == null) "Arama kişisi yok" else if (callOk) "Arama başlatıldı" else "Arama başlatılamadı")
+            val callEnabled = contacts.any { it.callEnabled }
+            append(if (!callEnabled) "Arama kişisi yok" else if (callOk) "Arama başlatıldı ${callTarget?.let { mask(it.phoneNumber) }.orEmpty()}" else "Hiçbir arama kişisi başlatılamadı")
         }
 
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {

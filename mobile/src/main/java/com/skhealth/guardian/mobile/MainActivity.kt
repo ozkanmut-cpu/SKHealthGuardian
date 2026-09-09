@@ -68,14 +68,17 @@ class MainActivity : Activity() {
             )
             AppSettings.save(this@MainActivity, newConfig)
             WatchCommandSender(this@MainActivity).sendConfig(newConfig)
-            Toast.makeText(this@MainActivity, "Kaydedildi; saat senkron komutu gönderildi", Toast.LENGTH_SHORT).show()
+            WatchStatusStore.mark(this@MainActivity, "CONFIG_BEKLENİYOR | saat ACK bekleniyor")
+            Toast.makeText(this@MainActivity, "Kaydedildi; saat onayı bekleniyor", Toast.LENGTH_SHORT).show()
         }})
+        root.addView(Button(this).apply { text = "Tam sistem testi"; setOnClickListener { startActivity(Intent(this@MainActivity, SystemTestActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Kişi / telefon tanımla"; setOnClickListener { startActivity(Intent(this@MainActivity, ContactsActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Gerçek SMS testi"; setOnClickListener { testSms() } })
         root.addView(Button(this).apply { text = "Gerçek arama testi"; setOnClickListener { testCall() } })
         root.addView(Button(this).apply { text = "Saat self-test gönder"; setOnClickListener { sendSelfTest() } })
-        root.addView(Button(this).apply { text = "Self-test durumu"; setOnClickListener { showStatus() } })
+        root.addView(Button(this).apply { text = "Self-test / saat durumu"; setOnClickListener { showStatus() } })
         root.addView(Button(this).apply { text = "Sistem sağlık kontrolü"; setOnClickListener { startActivity(Intent(this@MainActivity, SystemHealthActivity::class.java)) } })
+        root.addView(Button(this).apply { text = "Alarm olay geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, AlarmTimelineActivity::class.java)) } })
         root.addView(Button(this).apply { text = "SMS / arama kayıtları"; setOnClickListener { startActivity(Intent(this@MainActivity, DeliveryLogActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Ölçüm geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, HistoryActivity::class.java)) } })
     }
@@ -88,10 +91,14 @@ class MainActivity : Activity() {
     }
 
     private fun testCall() {
-        val c = ContactStore.contacts(this).firstOrNull { it.callEnabled } ?: return toast("Aranacak kişi tanımlı değil")
-        val ok = CallPlacer(this).call(c.phoneNumber)
-        DeliveryLogStore.add(this, "ARAMA TEST", "***${c.phoneNumber.takeLast(4)}", ok, if (ok) "test araması başlatıldı" else "test araması başlatılamadı / izin yok")
-        toast(if (ok) "Arama başlatıldı" else "Arama başlatılamadı / izin yok")
+        val targets = ContactStore.contacts(this).filter { it.callEnabled }
+        if (targets.isEmpty()) return toast("Aranacak kişi tanımlı değil")
+        for (c in targets) {
+            val ok = CallPlacer(this).call(c.phoneNumber)
+            DeliveryLogStore.add(this, "ARAMA TEST", "***${c.phoneNumber.takeLast(4)}", ok, if (ok) "test araması başlatıldı" else "başlatılamadı; sonraki kişi deneniyor")
+            if (ok) return toast("Arama başlatıldı")
+        }
+        toast("Hiçbir arama kişisi başlatılamadı / izin yok")
     }
 
     private fun sendSelfTest() {
@@ -108,8 +115,8 @@ class MainActivity : Activity() {
         val last = MonitoringState.lastReading(this)
         val lastTime = if (last == 0L) "yok" else SimpleDateFormat("HH:mm:ss", Locale("tr","TR")).format(Date(last))
         android.app.AlertDialog.Builder(this)
-            .setTitle("Self-test")
-            .setMessage("Saat: ${WatchStatusStore.status(this)}\nSon self-test: $time\nSon veri: $lastTime\nSMS izni: ${has(Manifest.permission.SEND_SMS)}\nArama izni: ${has(Manifest.permission.CALL_PHONE)}")
+            .setTitle("Saat durumu")
+            .setMessage("Saat: ${WatchStatusStore.status(this)}\nSon durum/ACK: $time\nSon veri: $lastTime\nSMS izni: ${has(Manifest.permission.SEND_SMS)}\nArama izni: ${has(Manifest.permission.CALL_PHONE)}")
             .setPositiveButton("Tamam", null)
             .show()
     }

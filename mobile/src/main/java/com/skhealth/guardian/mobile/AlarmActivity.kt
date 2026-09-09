@@ -66,6 +66,7 @@ class AlarmActivity : Activity() {
             setOnClickListener {
                 getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
                 WatchCommandSender(this@AlarmActivity).silenceAlarm()
+                AlarmTimelineStore.add(this@AlarmActivity, "ALARM SUSTURULDU", reason)
                 finish()
             }
         })
@@ -73,6 +74,7 @@ class AlarmActivity : Activity() {
             text = "Tekrar ölç"
             setOnClickListener {
                 WatchCommandSender(this@AlarmActivity).requestMeasurement()
+                AlarmTimelineStore.add(this@AlarmActivity, "TEKRAR ÖLÇÜM", "Alarm ekranından manuel ölçüm istendi")
             }
         })
         root.addView(Button(this).apply {
