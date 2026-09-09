@@ -10,9 +10,11 @@ import androidx.core.content.ContextCompat
 import java.util.UUID
 
 class SmsSender(private val context: Context) {
-    fun send(number: String, message: String): Boolean = send(number, message, UUID.randomUUID().toString(), 0)
+    fun send(number: String, message: String, alertTs: Long = 0L): Boolean =
+        send(number, message, UUID.randomUUID().toString(), 0, alertTs)
 
-    fun send(number: String, message: String, messageId: String, attempt: Int): Boolean {
+    fun send(number: String, message: String, messageId: String, attempt: Int, alertTs: Long = 0L): Boolean {
+        if (alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) return false
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return false
         return runCatching {
             val sms = context.getSystemService(SmsManager::class.java)
@@ -31,6 +33,7 @@ class SmsSender(private val context: Context) {
                     putExtra(SmsStatusReceiver.EXTRA_ATTEMPT, attempt)
                     putExtra(SmsStatusReceiver.EXTRA_PART, index + 1)
                     putExtra(SmsStatusReceiver.EXTRA_TOTAL, parts.size)
+                    putExtra(SmsStatusReceiver.EXTRA_ALERT_TS, alertTs)
                 }
                 sentIntents += PendingIntent.getBroadcast(
                     context,
@@ -46,6 +49,7 @@ class SmsSender(private val context: Context) {
                     putExtra(SmsStatusReceiver.EXTRA_ATTEMPT, attempt)
                     putExtra(SmsStatusReceiver.EXTRA_PART, index + 1)
                     putExtra(SmsStatusReceiver.EXTRA_TOTAL, parts.size)
+                    putExtra(SmsStatusReceiver.EXTRA_ALERT_TS, alertTs)
                 }
                 deliveredIntents += PendingIntent.getBroadcast(
                     context,
