@@ -77,27 +77,40 @@ object QaStressRunner {
         Check(lowConfirmed == 0, "alternan düşük/normal dizide doğrulanmış düşük alarm=$lowConfirmed")
     }
 
-    private fun criticalBurst(config: AlarmConfig, n: Int): QaStressResult = timed("critical-burst", "Kritik SpO₂ burst", n) {
+    private fun criticalBurst(config: AlarmConfig, n: Int): QaStressResult = timed("critical-burst", "Kritik SpO₂ recovery-cycle burst", n) {
         val e = AlarmEngine(config)
         val critical = (config.spo2CriticalImmediate - 1).coerceAtLeast(1)
+        val normal = config.spo2LowThreshold.coerceAtLeast(config.spo2CriticalImmediate)
         var actual = 0
+        var repeatedWhileLatched = 0
         repeat(n) { i ->
-            actual += e.evaluate(HealthReading(timestampMs = i * 1000L, spo2 = critical, heartRate = 80))
+            actual += e.evaluate(HealthReading(timestampMs = i * 3_000L, spo2 = critical, heartRate = 80))
                 .count { it.type == AlertType.SPO2_CRITICAL }
+            repeatedWhileLatched += e.evaluate(HealthReading(timestampMs = i * 3_000L + 1_000L, spo2 = critical, heartRate = 80))
+                .count { it.type == AlertType.SPO2_CRITICAL }
+            e.evaluate(HealthReading(timestampMs = i * 3_000L + 2_000L, spo2 = normal, heartRate = 80))
         }
-        Check(actual == n, "kritik alarm=$actual, beklenen=$n")
+        Check(actual == n && repeatedWhileLatched == 0, "episodeAlarm=$actual/$n latchedRepeat=$repeatedWhileLatched")
     }
 
-    private fun heartRateBurst(config: AlarmConfig, n: Int): QaStressResult = timed("hr-burst", "Yüksek nabız burst", n) {
+    private fun heartRateBurst(config: AlarmConfig, n: Int): QaStressResult = timed("hr-burst", "Yüksek nabız recovery-cycle burst", n) {
         val count = config.heartRateHighConfirmCount.coerceAtLeast(1)
         val e = AlarmEngine(config)
         var actual = 0
-        repeat(n) { i ->
-            actual += e.evaluate(HealthReading(timestampMs = i * 1000L, spo2 = 97, heartRate = config.heartRateHighThreshold + 5))
-                .count { it.type == AlertType.HEART_RATE_HIGH_CONFIRMED }
+        var repeatedWhileLatched = 0
+        var ts = 0L
+        repeat(n) {
+            repeat(count) {
+                actual += e.evaluate(
+                    HealthReading(timestampMs = ts++, spo2 = 97, heartRate = config.heartRateHighThreshold + 5)
+                ).count { it.type == AlertType.HEART_RATE_HIGH_CONFIRMED }
+            }
+            repeatedWhileLatched += e.evaluate(
+                HealthReading(timestampMs = ts++, spo2 = 97, heartRate = config.heartRateHighThreshold + 20)
+            ).count { it.type == AlertType.HEART_RATE_HIGH_CONFIRMED }
+            e.evaluate(HealthReading(timestampMs = ts++, spo2 = 97, heartRate = config.heartRateHighThreshold))
         }
-        val expected = n / count
-        Check(actual == expected, "yüksek HR alarm=$actual, beklenen=$expected")
+        Check(actual == n && repeatedWhileLatched == 0, "episodeAlarm=$actual/$n latchedRepeat=$repeatedWhileLatched")
     }
 
     private fun pc60Soak(n: Int): QaStressResult = timed("pc60-soak", "PC-60FW uzun akış", n) {
@@ -123,20 +136,39 @@ object QaStressRunner {
         Check(alarms in completedCycles..(completedCycles + 1) && recovered == 0, "alarm=$alarms cycle≈$completedCycles recovery=$recovered")
     }
 
-    private fun deterministicFuzz(config: AlarmConfig, n: Int): QaStressResult = timed("deterministic-fuzz", "Deterministik fuzz", n) {
+    private fun deterministicFuzz(config: AlarmConfig, n: Int): QaStressResult = timed("deterministic-fuzz", "Deterministik izole fuzz", n) {
         val random = Random(0x5A17C0DE)
         val e = AlarmEngine(config)
         var invalidAlerts = 0
         var missedCritical = 0
+        var duplicateCritical = 0
         repeat(n) { i ->
             val valid = random.nextInt(100) >= 8
             val spo2 = random.nextInt(50, 101)
             val hr = random.nextInt(35, 181)
-            val alerts = e.evaluate(HealthReading(timestampMs = i * 997L, spo2 = spo2, heartRate = hr, valid = valid))
+            val baseTs = i * 3_000L
+            val alerts = e.evaluate(HealthReading(timestampMs = baseTs, spo2 = spo2, heartRate = hr, valid = valid))
             if (!valid && alerts.isNotEmpty()) invalidAlerts++
             if (valid && spo2 < config.spo2CriticalImmediate && alerts.none { it.type == AlertType.SPO2_CRITICAL }) missedCritical++
+            if (valid && spo2 < config.spo2CriticalImmediate) {
+                duplicateCritical += e.evaluate(
+                    HealthReading(timestampMs = baseTs + 1_000L, spo2 = spo2, heartRate = hr, valid = true)
+                ).count { it.type == AlertType.SPO2_CRITICAL }
+            }
+            // Isolate the next fuzz case from this case's episode state.
+            e.evaluate(
+                HealthReading(
+                    timestampMs = baseTs + 2_000L,
+                    spo2 = config.spo2LowThreshold.coerceAtLeast(95),
+                    heartRate = 80,
+                    valid = true
+                )
+            )
         }
-        Check(invalidAlerts == 0 && missedCritical == 0, "invalidAlarm=$invalidAlerts missedCritical=$missedCritical")
+        Check(
+            invalidAlerts == 0 && missedCritical == 0 && duplicateCritical == 0,
+            "invalidAlarm=$invalidAlerts missedCritical=$missedCritical duplicateCritical=$duplicateCritical"
+        )
     }
 
     private data class Check(val ok: Boolean, val detail: String)
