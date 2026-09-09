@@ -1,5 +1,6 @@
 name: Release APKs
 
+# Release trigger: v0.8.1
 on:
   workflow_dispatch:
     inputs:
