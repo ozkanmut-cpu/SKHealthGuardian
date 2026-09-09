@@ -11,15 +11,27 @@ import com.skhealth.guardian.shared.SmsRetryPolicy
 class SmsStatusReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val target = intent.getStringExtra(EXTRA_TARGET) ?: "****"
-        val number = intent.getStringExtra(EXTRA_NUMBER)
-        val message = intent.getStringExtra(EXTRA_MESSAGE)
-        val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID)
         val attempt = intent.getIntExtra(EXTRA_ATTEMPT, 0)
         val part = intent.getIntExtra(EXTRA_PART, 1)
         val total = intent.getIntExtra(EXTRA_TOTAL, 1)
         val ok = resultCode == Activity.RESULT_OK
+
+        if (intent.action == ACTION_SMS_DELIVERED) {
+            val detail = if (ok) {
+                "Operatör teslim raporu alındı ($part/$total), deneme=${attempt + 1}"
+            } else {
+                "Operatör teslim raporu başarısız ($part/$total), deneme=${attempt + 1}, sonuç=$resultCode"
+            }
+            DeliveryLogStore.add(context, "SMS TESLİM", target, ok, detail)
+            AlarmTimelineStore.add(context, "SMS TESLİM", "$target • $detail")
+            return
+        }
+
+        val number = intent.getStringExtra(EXTRA_NUMBER)
+        val message = intent.getStringExtra(EXTRA_MESSAGE)
+        val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID)
         val detail = if (ok) {
-            "SMS parçası gönderildi ($part/$total), deneme=${attempt + 1}"
+            "SMS parçası gönderildi ($part/$total), deneme=${attempt + 1}; operatör teslim raporu bekleniyor"
         } else {
             "SMS gönderilemedi ($part/$total), deneme=${attempt + 1}, sonuç=$resultCode"
         }
@@ -54,6 +66,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_SMS_SENT = "com.skhealth.guardian.mobile.SMS_SENT"
+        const val ACTION_SMS_DELIVERED = "com.skhealth.guardian.mobile.SMS_DELIVERED"
         const val EXTRA_TARGET = "target"
         const val EXTRA_NUMBER = "number"
         const val EXTRA_MESSAGE = "message"
