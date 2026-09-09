@@ -29,7 +29,18 @@ class AlertIdentityAndAckPolicyTest {
     }
 
     @Test
-    fun technicalAlertWithoutReadingUsesTimestampFallback() {
+    fun currentTechnicalAlertsUseEventUuidNotTimestamp() {
+        val a = AlertEvent(AlertType.DATA_STALE, 100L, null, "stale", eventId = "event-a")
+        val b = AlertEvent(AlertType.DATA_STALE, 100L, null, "stale", eventId = "event-b")
+        val rolledBackSameEvent = a.copy(timestampMs = 1L)
+
+        assertFalse(AlertIdentity.of(a) == AlertIdentity.of(b))
+        assertEquals(AlertIdentity.of(a), AlertIdentity.of(rolledBackSameEvent))
+        assertTrue(AlertIdentity.of(a).contains(":event:event-a"))
+    }
+
+    @Test
+    fun legacyTechnicalIdentityOverloadKeepsTimestampFallback() {
         val a = AlertIdentity.of(AlertType.DATA_STALE, null, 100L)
         val b = AlertIdentity.of(AlertType.DATA_STALE, null, 101L)
         assertFalse(a == b)
