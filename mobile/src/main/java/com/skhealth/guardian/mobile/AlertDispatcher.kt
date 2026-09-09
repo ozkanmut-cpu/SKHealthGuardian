@@ -28,10 +28,16 @@ class AlertDispatcher(private val context: Context) {
         val smsTargets = contacts.filter { it.smsEnabled }
         val smsResults = smsTargets.map { contact ->
             val ok = sms.send(contact.phoneNumber, text)
-            DeliveryLogStore.add(context, "SMS", mask(contact.phoneNumber), ok, if (ok) "gönderim isteği kabul edildi" else "gönderim başarısız / izin yok")
+            DeliveryLogStore.add(
+                context,
+                "SMS",
+                mask(contact.phoneNumber),
+                ok,
+                if (ok) "modem gönderim kuyruğuna alındı; sonuç bekleniyor" else "kuyruğa alınamadı / izin yok"
+            )
             ok
         }
-        val smsOk = smsResults.isNotEmpty() && smsResults.all { it }
+        val smsQueued = smsResults.isNotEmpty() && smsResults.all { it }
 
         val callTarget = contacts.firstOrNull { it.callEnabled }
         val callOk = callTarget?.let {
@@ -41,7 +47,7 @@ class AlertDispatcher(private val context: Context) {
         } ?: false
 
         val remoteStatus = buildString {
-            append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsOk) "SMS gönderim isteği kabul edildi" else "SMS gönderilemedi")
+            append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsQueued) "SMS kuyruğa alındı; gönderim sonucu loglanacak" else "SMS kuyruğa alınamadı")
             append(" • ")
             append(if (callTarget == null) "Arama kişisi yok" else if (callOk) "Arama başlatıldı" else "Arama başlatılamadı")
         }
@@ -54,8 +60,6 @@ class AlertDispatcher(private val context: Context) {
             putExtra(AlarmActivity.EXTRA_REMOTE_STATUS, remoteStatus)
         }
 
-        // Post the full-screen notification first. Modern Android may block a direct
-        // background activity launch; the notification must still exist in that case.
         localNotification(alert, alarmIntent)
         runCatching { context.startActivity(alarmIntent) }
     }
