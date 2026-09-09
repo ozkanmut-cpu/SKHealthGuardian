@@ -2,6 +2,7 @@ package com.skhealth.guardian.wear
 
 import android.content.Context
 import com.google.android.gms.wearable.Wearable
+import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.PendingAckPolicy
 
@@ -13,12 +14,13 @@ class PhoneBridge(private val context: Context) {
         val bytes = payload.toByteArray()
         val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
         if (nodes.isEmpty()) {
-            enqueue(payload)
+            enqueueReading(payload)
             return
         }
 
         flushAlarmAcknowledgement(nodes.map { it.id })
-        flushQueued(nodes.map { it.id })
+        flushQueuedReadings(nodes.map { it.id })
+        flushQueuedAlerts(nodes.map { it.id })
         val ok = nodes.all { node ->
             runCatching {
                 Wearable.getMessageClient(context)
@@ -26,13 +28,37 @@ class PhoneBridge(private val context: Context) {
                     .awaitCompat()
             }.isSuccess
         }
-        if (!ok) enqueue(payload)
+        if (!ok) enqueueReading(payload)
+    }
+
+    suspend fun sendAlert(alert: AlertEvent) {
+        val payload = encodeAlert(alert)
+        val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
+        if (nodes.isEmpty()) {
+            enqueueAlert(payload)
+            return
+        }
+        flushAlarmAcknowledgement(nodes.map { it.id })
+        flushQueuedAlerts(nodes.map { it.id })
+        val bytes = payload.toByteArray()
+        val ok = nodes.all { node ->
+            runCatching {
+                Wearable.getMessageClient(context)
+                    .sendMessage(node.id, "/health/alert", bytes)
+                    .awaitCompat()
+            }.isSuccess
+        }
+        if (!ok) enqueueAlert(payload)
     }
 
     suspend fun sendHeartbeat(batteryPct: Int) {
         val payload = "${System.currentTimeMillis()}|$batteryPct".toByteArray()
         val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
-        if (nodes.isNotEmpty()) flushAlarmAcknowledgement(nodes.map { it.id })
+        if (nodes.isNotEmpty()) {
+            flushAlarmAcknowledgement(nodes.map { it.id })
+            flushQueuedReadings(nodes.map { it.id })
+            flushQueuedAlerts(nodes.map { it.id })
+        }
         nodes.forEach { node ->
             runCatching { Wearable.getMessageClient(context).sendMessage(node.id, "/health/heartbeat", payload).awaitCompat() }
         }
@@ -72,8 +98,8 @@ class PhoneBridge(private val context: Context) {
             .addOnFailureListener { savePendingAck(payload) }
     }
 
-    private suspend fun flushQueued(nodeIds: List<String>) {
-        val queued = synchronized(this) { loadQueue() }
+    private suspend fun flushQueuedReadings(nodeIds: List<String>) {
+        val queued = synchronized(this) { loadQueue(KEY_READING_QUEUE) }
         if (queued.isEmpty()) return
         val delivered = mutableSetOf<String>()
         queued.forEach { payload ->
@@ -83,7 +109,21 @@ class PhoneBridge(private val context: Context) {
             }
             if (ok) delivered += payload
         }
-        if (delivered.isNotEmpty()) removeDelivered(delivered)
+        if (delivered.isNotEmpty()) removeDelivered(KEY_READING_QUEUE, delivered)
+    }
+
+    private suspend fun flushQueuedAlerts(nodeIds: List<String>) {
+        val queued = synchronized(this) { loadQueue(KEY_ALERT_QUEUE) }
+        if (queued.isEmpty()) return
+        val delivered = mutableSetOf<String>()
+        queued.forEach { payload ->
+            val bytes = payload.toByteArray()
+            val ok = nodeIds.all { id ->
+                runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alert", bytes).awaitCompat() }.isSuccess
+            }
+            if (ok) delivered += payload
+        }
+        if (delivered.isNotEmpty()) removeDelivered(KEY_ALERT_QUEUE, delivered)
     }
 
     private suspend fun flushAlarmAcknowledgement(nodeIds: List<String>) {
@@ -104,24 +144,37 @@ class PhoneBridge(private val context: Context) {
         reading.source
     ).joinToString("|")
 
+    private fun encodeAlert(alert: AlertEvent): String = listOf(
+        "v2",
+        alert.eventId,
+        alert.type.name,
+        alert.timestampMs.toString(),
+        sanitizeReason(alert.message)
+    ).joinToString("|")
+
     @Synchronized
-    private fun enqueue(payload: String) {
-        val q = loadQueue().toMutableList()
+    private fun enqueueReading(payload: String) = enqueue(KEY_READING_QUEUE, payload, MAX_READING_QUEUE)
+
+    @Synchronized
+    private fun enqueueAlert(payload: String) = enqueue(KEY_ALERT_QUEUE, payload, MAX_ALERT_QUEUE)
+
+    private fun enqueue(key: String, payload: String, max: Int) {
+        val q = loadQueue(key).toMutableList()
         if (!q.contains(payload)) q += payload
-        saveQueue(q.takeLast(MAX_QUEUE))
+        saveQueue(key, q.takeLast(max))
     }
 
-    private fun loadQueue(): List<String> = prefs.getString(KEY_QUEUE, "")
+    private fun loadQueue(key: String): List<String> = prefs.getString(key, "")
         .orEmpty().lines().filter { it.isNotBlank() }
 
-    private fun saveQueue(items: List<String>) {
-        prefs.edit().putString(KEY_QUEUE, items.joinToString("\n")).apply()
+    private fun saveQueue(key: String, items: List<String>) {
+        prefs.edit().putString(key, items.joinToString("\n")).apply()
     }
 
     @Synchronized
-    private fun removeDelivered(delivered: Set<String>) {
-        val current = loadQueue()
-        saveQueue(current.filterNot { it in delivered })
+    private fun removeDelivered(key: String, delivered: Set<String>) {
+        val current = loadQueue(key)
+        saveQueue(key, current.filterNot { it in delivered })
     }
 
     @Synchronized
@@ -148,10 +201,12 @@ class PhoneBridge(private val context: Context) {
         reason.replace('|', ' ').replace('\n', ' ').take(160)
 
     companion object {
-        private const val KEY_QUEUE = "pending_readings"
+        private const val KEY_READING_QUEUE = "pending_readings"
+        private const val KEY_ALERT_QUEUE = "pending_alerts_v2"
         private const val KEY_PENDING_ACK = "pending_alarm_ack"
         private const val KEY_ACK_SEQUENCE = "alarm_ack_sequence"
-        private const val MAX_QUEUE = 500
+        private const val MAX_READING_QUEUE = 500
+        private const val MAX_ALERT_QUEUE = 100
     }
 }
 
