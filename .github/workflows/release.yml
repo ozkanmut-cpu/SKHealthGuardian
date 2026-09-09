@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (example: v0.7.0)"
+        description: "Release tag (example: v0.8.0)"
         required: false
-        default: "v0.7.0"
+        default: "v0.8.0"
   push:
     branches: [main]
     paths:
@@ -83,10 +83,12 @@ jobs:
 
       - name: Stage release APKs
         if: steps.existing.outputs.exists != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
-          cp mobile/build/outputs/apk/debug/mobile-debug.apk SKHealthGuardian-mobile-v0.7.0-debug.apk
-          cp wear/build/outputs/apk/debug/wear-debug.apk SKHealthGuardian-wear-v0.7.0-debug.apk
+          cp mobile/build/outputs/apk/debug/mobile-debug.apk "SKHealthGuardian-mobile-${TAG}-debug.apk"
+          cp wear/build/outputs/apk/debug/wear-debug.apk "SKHealthGuardian-wear-${TAG}-debug.apk"
 
       - name: Create GitHub prerelease
         if: steps.existing.outputs.exists != 'true'
@@ -96,8 +98,8 @@ jobs:
         shell: bash
         run: |
           gh release create "$TAG" \
-            SKHealthGuardian-mobile-v0.7.0-debug.apk \
-            SKHealthGuardian-wear-v0.7.0-debug.apk \
+            "SKHealthGuardian-mobile-${TAG}-debug.apk" \
+            "SKHealthGuardian-wear-${TAG}-debug.apk" \
             --target "$GITHUB_SHA" \
             --title "SK Health Guardian $TAG" \
             --prerelease \
