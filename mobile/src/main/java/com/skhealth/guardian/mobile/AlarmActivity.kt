@@ -64,7 +64,9 @@ class AlarmActivity : Activity() {
         root.addView(action("🔕", "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
             getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
             WatchCommandSender(this@AlarmActivity).silenceAlarm()
-            AlertAcknowledgementStore.acknowledge(this@AlarmActivity, if (alertTs > 0) alertTs else System.currentTimeMillis())
+            val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
+            AlertAcknowledgementStore.acknowledge(this@AlarmActivity, acknowledgedTs)
+            EscalationScheduler.cancel(this@AlarmActivity, acknowledgedTs)
             AlarmTimelineStore.add(this@AlarmActivity, "ALARM SUSTURULDU", reason)
             finish()
         }, UiStyle.sectionParams(this, 16))
