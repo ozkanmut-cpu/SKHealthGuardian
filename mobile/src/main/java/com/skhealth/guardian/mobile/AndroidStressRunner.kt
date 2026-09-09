@@ -38,6 +38,7 @@ object AndroidStressRunner {
                 concurrentDuplicateInsertStorm(context, 8, 2_000 * scale),
                 concurrentHistoryReaders(context, 8, 2_000 * scale),
                 smsRetryClaimStorm(context, 8, 2_000 * scale),
+                boundedIdStoreStorm(context, 8, 2_000 * scale),
                 prefsReplayStorm(context, 20_000 * scale)
             )
         )
@@ -242,6 +243,40 @@ object AndroidStressRunner {
             }
         } finally {
             ids.forEach { id -> repeat(attempts) { attempt -> SmsRetryState.clearClaim(context, id, attempt) } }
+        }
+    }
+
+    private fun boundedIdStoreStorm(context: Context, workers: Int, perWorker: Int): AndroidStressResult {
+        val ops = workers * perWorker
+        val maxEntries = 256
+        val prefs = context.getSharedPreferences("qa_bounded_id_stress", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        return try {
+            timed("bounded-id-store", "8 paralel durable ACK-ID store", ops) {
+                val executor = Executors.newFixedThreadPool(workers)
+                try {
+                    val jobs = (0 until workers).map { worker ->
+                        Callable {
+                            repeat(perWorker) { i ->
+                                BoundedIdStore.add(prefs, "ids", "qa-$worker-$i", maxEntries)
+                            }
+                            true
+                        }
+                    }
+                    executor.invokeAll(jobs).forEach { it.get(30, TimeUnit.SECONDS) }
+                    val snapshot = BoundedIdStore.snapshot(prefs, "ids")
+                    val unique = snapshot.toSet().size
+                    val allReadable = snapshot.all { BoundedIdStore.contains(prefs, "ids", it) }
+                    Check(
+                        snapshot.size == maxEntries && unique == maxEntries && allReadable,
+                        "rows=${snapshot.size}/$maxEntries unique=$unique readable=$allReadable"
+                    )
+                } finally {
+                    executor.shutdownNow()
+                }
+            }
+        } finally {
+            prefs.edit().clear().commit()
         }
     }
 
