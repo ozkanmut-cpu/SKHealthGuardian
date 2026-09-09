@@ -38,6 +38,7 @@ object AndroidStressRunner {
                 concurrentDuplicateInsertStorm(context, 8, 2_000 * scale),
                 concurrentHistoryReaders(context, 8, 2_000 * scale),
                 smsRetryClaimStorm(context, 8, 2_000 * scale),
+                escalationLeaseClaimStorm(context, 8, 2_000 * scale),
                 boundedIdStoreStorm(context, 8, 2_000 * scale),
                 prefsReplayStorm(context, 20_000 * scale)
             )
@@ -243,6 +244,49 @@ object AndroidStressRunner {
             }
         } finally {
             ids.forEach { id -> repeat(attempts) { attempt -> SmsRetryState.clearClaim(context, id, attempt) } }
+        }
+    }
+
+    private fun escalationLeaseClaimStorm(context: Context, workers: Int, perWorker: Int): AndroidStressResult {
+        val uniqueAlarms = 500
+        val ops = workers * perWorker
+        val ids = (0 until uniqueAlarms).map { "qa-escalation-lease-$it" }
+        ids.forEach { EscalationDeliveryState.clearForQa(context, it) }
+        return try {
+            timed("escalation-lease-claim", "8 paralel escalation lease claim fırtınası", ops) {
+                val executor = Executors.newFixedThreadPool(workers)
+                try {
+                    val jobs = (0 until workers).map { worker ->
+                        Callable {
+                            var wins = 0
+                            repeat(perWorker) { i ->
+                                val identity = ids[(i + worker) % uniqueAlarms]
+                                if (EscalationDeliveryState.tryAcquireLease(
+                                        context = context,
+                                        identity = identity,
+                                        nowMs = 10_000_000L,
+                                        leaseMs = 120_000L
+                                    )) {
+                                    wins++
+                                }
+                            }
+                            wins
+                        }
+                    }
+                    val wins = executor.invokeAll(jobs).sumOf { it.get(30, TimeUnit.SECONDS) }
+                    val duplicateWins = ids.count {
+                        EscalationDeliveryState.tryAcquireLease(context, it, 10_000_001L, 120_000L)
+                    }
+                    Check(
+                        wins == uniqueAlarms && duplicateWins == 0,
+                        "wins=$wins/$uniqueAlarms duplicateWins=$duplicateWins"
+                    )
+                } finally {
+                    executor.shutdownNow()
+                }
+            }
+        } finally {
+            ids.forEach { EscalationDeliveryState.clearForQa(context, it) }
         }
     }
 
