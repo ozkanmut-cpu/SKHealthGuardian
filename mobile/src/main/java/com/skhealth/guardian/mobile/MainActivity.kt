@@ -90,7 +90,13 @@ class MainActivity : Activity() {
 
         val reliability = SpO2ReliabilityStore.summary(this)
         root.addView(TextView(this).apply {
-            text = if (reliability.count == 0) "Watch doğrulama: henüz eşleşme yok" else "Watch uyumu: ${reliability.label} • ${reliability.count} karşılaştırma • ort. fark ${String.format(Locale.US, "%.1f", reliability.meanAbsoluteError ?: 0.0)} puan"
+            text = if (reliability.count == 0) {
+                "Watch doğrulama: henüz eşleşme yok"
+            } else {
+                val spo2Mae = String.format(Locale.US, "%.1f", reliability.meanAbsoluteError ?: 0.0)
+                val hrText = if (reliability.hrCount > 0) " • nabız farkı ${String.format(Locale.US, "%.1f", reliability.hrMeanAbsoluteError ?: 0.0)} bpm" else ""
+                "Watch uyumu: ${reliability.label} • ${reliability.count} karşılaştırma • SpO₂ farkı $spo2Mae puan$hrText"
+            }
             textSize = 15f
             setPadding(0, 22, 0, 18)
             setOnClickListener { startActivity(Intent(this@MainActivity, SpO2ReliabilityActivity::class.java)) }
@@ -131,7 +137,7 @@ class MainActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun requestPermissions() {
-        val wanted = mutableListOf(Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE)
+        val wanted = mutableListOf(Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
         if (Build.VERSION.SDK_INT >= 31) { wanted += Manifest.permission.BLUETOOTH_CONNECT; wanted += Manifest.permission.BLUETOOTH_SCAN }
         val missing = wanted.filterNot { has(it) }
