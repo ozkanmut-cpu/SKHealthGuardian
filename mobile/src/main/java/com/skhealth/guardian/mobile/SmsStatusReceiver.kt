@@ -39,28 +39,25 @@ class SmsStatusReceiver : BroadcastReceiver() {
         AlarmTimelineStore.add(context, "SMS SONUCU", "$target • $detail")
 
         val delay = SmsRetryPolicy.nextDelayMs(attempt)
-        if (!ok && number != null && message != null && messageId != null && delay != null) {
-            val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            val key = "scheduled_${messageId}_$attempt"
-            if (!prefs.getBoolean(key, false)) {
-                prefs.edit().putBoolean(key, true).apply()
-                val retryIntent = Intent(context, SmsRetryReceiver::class.java).apply {
-                    putExtra(EXTRA_NUMBER, number)
-                    putExtra(EXTRA_MESSAGE, message)
-                    putExtra(EXTRA_MESSAGE_ID, messageId)
-                    putExtra(EXTRA_ATTEMPT, attempt + 1)
-                    putExtra(EXTRA_TARGET, target)
-                }
-                val pi = PendingIntent.getBroadcast(
-                    context,
-                    (messageId.hashCode() * 37 + attempt),
-                    retryIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val alarm = context.getSystemService(AlarmManager::class.java)
-                alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pi)
-                DeliveryLogStore.add(context, "SMS RETRY", target, true, "${delay / 1000} sn sonra yeniden deneme planlandı")
+        if (!ok && number != null && message != null && messageId != null && delay != null &&
+            SmsRetryState.claimSchedule(context, messageId, attempt)
+        ) {
+            val retryIntent = Intent(context, SmsRetryReceiver::class.java).apply {
+                putExtra(EXTRA_NUMBER, number)
+                putExtra(EXTRA_MESSAGE, message)
+                putExtra(EXTRA_MESSAGE_ID, messageId)
+                putExtra(EXTRA_ATTEMPT, attempt + 1)
+                putExtra(EXTRA_TARGET, target)
             }
+            val pi = PendingIntent.getBroadcast(
+                context,
+                (messageId.hashCode() * 37 + attempt),
+                retryIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarm = context.getSystemService(AlarmManager::class.java)
+            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + delay, pi)
+            DeliveryLogStore.add(context, "SMS RETRY", target, true, "${delay / 1000} sn sonra yeniden deneme planlandı")
         }
     }
 
@@ -74,6 +71,5 @@ class SmsStatusReceiver : BroadcastReceiver() {
         const val EXTRA_ATTEMPT = "attempt"
         const val EXTRA_PART = "part"
         const val EXTRA_TOTAL = "total"
-        private const val PREF = "sms_retry_state"
     }
 }
