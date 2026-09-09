@@ -36,6 +36,7 @@ object AndroidStressRunner {
                 duplicateLookupStorm(context, 10_000 * scale),
                 concurrentDuplicateInsertStorm(context, 8, 2_000 * scale),
                 concurrentHistoryReaders(context, 8, 2_000 * scale),
+                smsRetryClaimStorm(context, 8, 2_000 * scale),
                 prefsReplayStorm(context, 20_000 * scale)
             )
         )
@@ -176,6 +177,40 @@ object AndroidStressRunner {
             }
         } finally {
             HistoryStore.replace(context, backup)
+        }
+    }
+
+    private fun smsRetryClaimStorm(context: Context, workers: Int, perWorker: Int): AndroidStressResult {
+        val uniqueMessages = 500
+        val attempts = 3
+        val ops = workers * perWorker
+        val ids = (0 until uniqueMessages).map { "qa-retry-$it" }
+        ids.forEach { id -> repeat(attempts) { attempt -> SmsRetryState.clearClaim(context, id, attempt) } }
+        return try {
+            timed("sms-retry-claim", "8 paralel SMS retry claim fırtınası", ops) {
+                val executor = Executors.newFixedThreadPool(workers)
+                try {
+                    val jobs = (0 until workers).map { worker ->
+                        Callable {
+                            var wins = 0
+                            repeat(perWorker) { i ->
+                                val messageId = ids[(i + worker) % uniqueMessages]
+                                val attempt = (i + worker) % attempts
+                                if (SmsRetryState.claimSchedule(context, messageId, attempt)) wins++
+                            }
+                            wins
+                        }
+                    }
+                    val wins = executor.invokeAll(jobs).sumOf { it.get(30, TimeUnit.SECONDS) }
+                    val expected = uniqueMessages * attempts
+                    val claimed = ids.sumOf { id -> (0 until attempts).count { attempt -> SmsRetryState.isClaimed(context, id, attempt) } }
+                    Check(wins == expected && claimed == expected, "wins=$wins/$expected claimed=$claimed/$expected")
+                } finally {
+                    executor.shutdownNow()
+                }
+            }
+        } finally {
+            ids.forEach { id -> repeat(attempts) { attempt -> SmsRetryState.clearClaim(context, id, attempt) } }
         }
     }
 
