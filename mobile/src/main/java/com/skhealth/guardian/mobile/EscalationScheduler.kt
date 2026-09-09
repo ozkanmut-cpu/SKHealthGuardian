@@ -11,6 +11,7 @@ object EscalationScheduler {
     private const val DUE_PREFIX = "due_"
     private const val REASON_PREFIX = "reason_"
 
+    @Synchronized
     fun schedule(context: Context, alertTs: Long, reason: String, dueAtMs: Long) {
         if (alertTs <= 0L || dueAtMs <= 0L) return
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
@@ -21,6 +22,7 @@ object EscalationScheduler {
         arm(context, alertTs, reason, dueAtMs)
     }
 
+    @Synchronized
     fun cancel(context: Context, alertTs: Long) {
         if (alertTs <= 0L) return
         context.getSystemService(AlarmManager::class.java).cancel(pendingIntent(context, alertTs, ""))
@@ -30,6 +32,7 @@ object EscalationScheduler {
 
     fun markConsumed(context: Context, alertTs: Long) = cancel(context, alertTs)
 
+    @Synchronized
     fun restorePending(context: Context, nowMs: Long = System.currentTimeMillis()): Int {
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         val ack = AlertAcknowledgementStore.lastAcknowledgedAt(context)
