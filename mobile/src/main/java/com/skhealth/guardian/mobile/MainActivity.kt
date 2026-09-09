@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.core.app.ActivityCompat
@@ -67,7 +68,7 @@ class MainActivity : Activity() {
             textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 18, 0, 4)
-            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         })
         root.addView(TextView(this).apply {
             text = "Aktif kaynak: $source • ${ageText(age)}"
