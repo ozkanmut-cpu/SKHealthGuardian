@@ -33,6 +33,7 @@ object AndroidStressRunner {
             listOf(
                 historyWriteReadTrim(context, 2_500 * scale),
                 timelineWriteReadTrim(context, 1_500 * scale),
+                concurrentTimelineWriters(context, 8, 1_000 * scale),
                 duplicateLookupStorm(context, 10_000 * scale),
                 concurrentDuplicateInsertStorm(context, 8, 2_000 * scale),
                 concurrentHistoryReaders(context, 8, 2_000 * scale),
@@ -80,6 +81,36 @@ object AndroidStressRunner {
                 val expectedSize = minOf(n, 500)
                 val tailOk = rows.lastOrNull()?.detail == "event-${n - 1}"
                 Check(rows.size == expectedSize && tailOk, "events=${rows.size}/$expectedSize tail=${rows.lastOrNull()?.detail}")
+            }
+        } finally {
+            AlarmTimelineStore.replace(context, backup)
+        }
+    }
+
+    private fun concurrentTimelineWriters(context: Context, workers: Int, perWorker: Int): AndroidStressResult {
+        val backup = AlarmTimelineStore.events(context, 500)
+        val ops = workers * perWorker
+        return try {
+            AlarmTimelineStore.replace(context, emptyList())
+            timed("timeline-parallel", "8 paralel Timeline yazıcısı", ops) {
+                val executor = Executors.newFixedThreadPool(workers)
+                try {
+                    val jobs = (0 until workers).map { worker ->
+                        Callable {
+                            repeat(perWorker) { i ->
+                                val seq = worker * perWorker + i
+                                AlarmTimelineStore.add(context, "CHAOS", "parallel-$seq", 6_000_000L + seq)
+                            }
+                            true
+                        }
+                    }
+                    executor.invokeAll(jobs).forEach { it.get(30, TimeUnit.SECONDS) }
+                    val rows = AlarmTimelineStore.events(context, 500)
+                    val unique = rows.map { it.detail }.toSet().size
+                    Check(rows.size == minOf(ops, 500) && unique == rows.size, "rows=${rows.size} unique=$unique ops=$ops")
+                } finally {
+                    executor.shutdownNow()
+                }
             }
         } finally {
             AlarmTimelineStore.replace(context, backup)
