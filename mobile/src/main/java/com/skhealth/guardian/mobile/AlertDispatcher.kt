@@ -57,7 +57,7 @@ class AlertDispatcher(private val context: Context) {
         }
         val smsQueued = smsAttempted > 0 && smsQueuedCount == smsAttempted
 
-        var callTarget: EmergencyContact? = null
+        var callTargetNumber: String? = null
         for (candidate in contacts.filter { it.callEnabled }) {
             if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
                 AlarmTimelineStore.add(context, "ARAMA İPTAL", "Alarm susturuldu; kalan ilk aramalar durduruldu", alert.timestampMs)
@@ -73,11 +73,11 @@ class AlertDispatcher(private val context: Context) {
             )
             AlarmTimelineStore.add(context, "ARAMA", "${mask(candidate.phoneNumber)} ${if (ok) "başlatıldı" else "başlatılamadı"}")
             if (ok) {
-                callTarget = candidate
+                callTargetNumber = candidate.phoneNumber
                 break
             }
         }
-        val callOk = callTarget != null
+        val callOk = callTargetNumber != null
         val acknowledgedDuringDispatch = AlertAcknowledgementStore.isAcknowledged(context, alertId)
 
         val remoteStatus = buildString {
@@ -97,7 +97,7 @@ class AlertDispatcher(private val context: Context) {
                 append(
                     when {
                         !callEnabled -> "Arama kişisi yok"
-                        callOk -> "Arama başlatıldı ${callTarget?.let { mask(it.phoneNumber) }.orEmpty()}"
+                        callOk -> "Arama başlatıldı ${callTargetNumber?.let { mask(it) }.orEmpty()}"
                         else -> "Hiçbir arama kişisi başlatılamadı"
                     }
                 )
