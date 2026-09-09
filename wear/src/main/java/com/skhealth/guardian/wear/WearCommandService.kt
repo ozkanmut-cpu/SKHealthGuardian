@@ -22,9 +22,10 @@ class WearCommandService : WearableListenerService() {
             )
             "/health/config" -> WearSettings.decode(event.data)?.let { config ->
                 WearSettings.save(this, config)
+                WearSettings.saveTiming(this, event.data)
                 scope.launch {
                     sendStatus(
-                        "CONFIG_OK | SpO₂ kritik=${config.spo2CriticalImmediate} | düşük=${config.spo2LowThreshold} | HR yüksek=${config.heartRateHighThreshold} | stale=${config.staleDataMs / 60_000}dk"
+                        "CONFIG_OK | SpO₂ kritik=${config.spo2CriticalImmediate} | düşük=${config.spo2LowThreshold} | HR yüksek=${config.heartRateHighThreshold} | ölçüm=${WearSettings.measurementIntervalMs(this@WearCommandService) / 60_000}dk | stale=${config.staleDataMs / 60_000}dk"
                     )
                 }
             }
