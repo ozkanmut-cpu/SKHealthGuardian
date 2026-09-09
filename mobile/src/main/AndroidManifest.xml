@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -38,6 +39,9 @@
         <receiver android:name=".SmsStatusReceiver" android:exported="false" />
         <receiver android:name=".SmsRetryReceiver" android:exported="false" />
         <receiver android:name=".AlarmEscalationReceiver" android:exported="false" />
+        <receiver android:name=".CallStateReceiver" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.PHONE_STATE"/></intent-filter>
+        </receiver>
         <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter>
         </receiver>
