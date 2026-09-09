@@ -24,8 +24,7 @@ class SystemTestActivity : Activity() {
         super.onCreate(savedInstanceState)
         UiStyle.applyBars(this)
         val root = UiStyle.page(this)
-        root.addView(UiStyle.title(this, "QA ön kontrol"))
-        root.addView(UiStyle.subtitle(this, "Telefon, Galaxy Watch, acil kişiler ve PC-60FW zincirini doğrular. Gerçek SMS/arama yalnızca sen başlatırsan çalışır."))
+        root.addView(UiStyle.detailHeader(this, "QA ön kontrol", "Telefon, Galaxy Watch, acil kişiler ve PC-60FW zincirini doğrular. Gerçek SMS/arama yalnızca sen başlatırsan çalışır."))
 
         val summaryCard = UiStyle.card(this)
         summary = UiStyle.text(this, "Kontroller çalıştırılıyor…", 20f, UiStyle.BLUE, true)
