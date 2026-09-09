@@ -17,7 +17,7 @@ class Pc60AlarmController(private val context: Context) {
         val reading = sample.toHealthReading()
         HistoryStore.add(context, reading)
         if (sample.valid) MonitoringState.markReading(context, System.currentTimeMillis())
-        SpO2ReliabilityStore.onPc60Reading(context, sample.timestampMs, sample.spo2, sample.valid)
+        SpO2ReliabilityStore.onPc60Reading(context, sample.timestampMs, sample.spo2, sample.valid, sample.heartRate)
 
         when (policy.evaluate(sample)) {
             Pc60Decision.ALARM -> {
