@@ -48,12 +48,57 @@ class AlarmEngineTest {
     }
 
     @Test
+    fun continuousCriticalSpo2ProducesOneAlarmUntilRecovery() {
+        val engine = AlarmEngine(config)
+        assertEquals(AlertType.SPO2_CRITICAL, engine.evaluate(HealthReading(timestampMs = 1L, spo2 = 79)).single().type)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 2L, spo2 = 78)).isEmpty())
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 3L, spo2 = 76)).isEmpty())
+    }
+
+    @Test
+    fun lowEpisodeCanEscalateOnceToCritical() {
+        val engine = AlarmEngine(config)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 1L, spo2 = 86)).isEmpty())
+        assertEquals(AlertType.SPO2_LOW_CONFIRMED, engine.evaluate(HealthReading(timestampMs = 2L, spo2 = 85)).single().type)
+        assertEquals(AlertType.SPO2_CRITICAL, engine.evaluate(HealthReading(timestampMs = 3L, spo2 = 79)).single().type)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 4L, spo2 = 78)).isEmpty())
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 5L, spo2 = 85)).isEmpty())
+    }
+
+    @Test
+    fun recoveryAllowsNewSpo2Episode() {
+        val engine = AlarmEngine(config)
+        assertEquals(AlertType.SPO2_CRITICAL, engine.evaluate(HealthReading(timestampMs = 1L, spo2 = 79)).single().type)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 2L, spo2 = 95)).isEmpty())
+        assertEquals(AlertType.SPO2_CRITICAL, engine.evaluate(HealthReading(timestampMs = 3L, spo2 = 78)).single().type)
+    }
+
+    @Test
     fun heartRateAbove130RequiresTwoValidReadings() {
         val engine = AlarmEngine(config)
         assertTrue(engine.evaluate(HealthReading(timestampMs = 1L, heartRate = 131)).isEmpty())
         val alerts = engine.evaluate(HealthReading(timestampMs = 2L, heartRate = 140))
         assertEquals(1, alerts.size)
         assertEquals(AlertType.HEART_RATE_HIGH_CONFIRMED, alerts.single().type)
+    }
+
+    @Test
+    fun continuousHighHeartRateProducesOneAlarmUntilRecovery() {
+        val engine = AlarmEngine(config)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 1L, heartRate = 140)).isEmpty())
+        assertEquals(AlertType.HEART_RATE_HIGH_CONFIRMED, engine.evaluate(HealthReading(timestampMs = 2L, heartRate = 141)).single().type)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 3L, heartRate = 150)).isEmpty())
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 4L, heartRate = 155)).isEmpty())
+    }
+
+    @Test
+    fun recoveryAllowsNewHighHeartRateEpisode() {
+        val engine = AlarmEngine(config)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 1L, heartRate = 140)).isEmpty())
+        assertEquals(AlertType.HEART_RATE_HIGH_CONFIRMED, engine.evaluate(HealthReading(timestampMs = 2L, heartRate = 141)).single().type)
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 3L, heartRate = 100)).isEmpty())
+        assertTrue(engine.evaluate(HealthReading(timestampMs = 4L, heartRate = 142)).isEmpty())
+        assertEquals(AlertType.HEART_RATE_HIGH_CONFIRMED, engine.evaluate(HealthReading(timestampMs = 5L, heartRate = 143)).single().type)
     }
 
     @Test
