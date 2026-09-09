@@ -1,15 +1,18 @@
 package com.skhealth.guardian.mobile
 
 import android.content.Context
+import com.skhealth.guardian.shared.SourcePriorityPolicy
 
 object SourcePriorityCoordinator {
-    private const val PC60_FRESH_MS = 10_000L
-
     fun isPc60Authoritative(context: Context, nowMs: Long = System.currentTimeMillis()): Boolean {
         val s = Pc60StatusStore.load(context)
-        val fresh = s.lastPacketAt > 0L && nowMs - s.lastPacketAt in 0..PC60_FRESH_MS
-        val physiologic = !s.probeOff && !s.pulseSearching && (s.spo2 ?: 0) in 1..100
-        return fresh && physiologic
+        return SourcePriorityPolicy.isPc60Authoritative(
+            nowMs = nowMs,
+            lastPacketAt = s.lastPacketAt,
+            spo2 = s.spo2,
+            probeOff = s.probeOff,
+            pulseSearching = s.pulseSearching
+        )
     }
 
     fun activeSourceLabel(context: Context, nowMs: Long = System.currentTimeMillis()): String =
