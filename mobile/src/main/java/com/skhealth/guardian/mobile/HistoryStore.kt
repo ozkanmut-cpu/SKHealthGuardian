@@ -10,18 +10,40 @@ object HistoryStore {
     private const val PREF = "reading_history"
     private const val KEY = "rows"
     private const val MAX = 1000
+    private val lock = Any()
 
     fun add(context: Context, r: HealthReading) {
+        synchronized(lock) {
+            val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            val rows = (p.getString(KEY, "") ?: "").lineSequence().filter { it.isNotBlank() }.toMutableList()
+            rows += encode(r)
+            while (rows.size > MAX) rows.removeAt(0)
+            p.edit().putString(KEY, rows.joinToString("\n")).apply()
+        }
+    }
+
+    /**
+     * Atomically checks the replay id and stores the reading when it is new.
+     * Blank ids are treated as non-deduplicable legacy readings and are stored.
+     */
+    fun addIfAbsent(context: Context, r: HealthReading): Boolean = synchronized(lock) {
         val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        val rows = (p.getString(KEY, "") ?: "").lineSequence().filter { it.isNotBlank() }.toMutableList()
+        val raw = p.getString(KEY, "") ?: ""
+        if (r.id.isNotBlank() && raw.lineSequence().any { line -> line.substringBefore('|', "") == r.id }) {
+            return@synchronized false
+        }
+        val rows = raw.lineSequence().filter { it.isNotBlank() }.toMutableList()
         rows += encode(r)
         while (rows.size > MAX) rows.removeAt(0)
         p.edit().putString(KEY, rows.joinToString("\n")).apply()
+        true
     }
 
     fun replace(context: Context, readings: List<HealthReading>) {
-        val rows = readings.takeLast(MAX).joinToString("\n", transform = ::encode)
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY, rows).apply()
+        synchronized(lock) {
+            val rows = readings.takeLast(MAX).joinToString("\n", transform = ::encode)
+            context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY, rows).apply()
+        }
     }
 
     fun contains(context: Context, id: String): Boolean {
