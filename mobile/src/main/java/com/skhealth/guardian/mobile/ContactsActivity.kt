@@ -3,14 +3,13 @@ package com.skhealth.guardian.mobile
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
-import android.view.Gravity
 import android.widget.*
 
 class ContactsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); UiStyle.applyBars(this); render() }
     private fun render() {
         val root=UiStyle.page(this); val contacts=ContactStore.contacts(this)
-        root.addView(UiStyle.title(this,"Acil durum kişileri")); root.addView(UiStyle.subtitle(this,"Alarm sırasında SMS gönderilecek ve aranacak kişileri yönet."))
+        root.addView(UiStyle.detailHeader(this,"Acil durum kişileri","Alarm sırasında SMS gönderilecek ve aranacak kişileri yönet."))
         val form=UiStyle.card(this); form.addView(UiStyle.text(this,"Yeni kişi",19f,UiStyle.TEXT,true))
         val name=UiStyle.field(this,"İsim"); val phone=UiStyle.field(this,"Telefon (+90…)"); phone.inputType=3
         val sms=UiStyle.check(this,"Alarmda SMS gönder",true); val call=UiStyle.check(this,"Alarmda ara",false)
