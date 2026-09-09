@@ -25,11 +25,21 @@ class Pc60BleService : Service() {
     private var packetCount = 0L
     private var currentName = ""
     private var currentAddress = ""
+    private var streamStartedAt = 0L
+    private var lastDataAt = 0L
+    private var noDataRecoveryAttempts = 0
     private lateinit var sdkRuntime: Pc60SdkRuntime
     private lateinit var alarmController: Pc60AlarmController
 
     private val adapter: BluetoothAdapter?
         get() = getSystemService(BluetoothManager::class.java).adapter
+
+    private val dataWatchdog = object : Runnable {
+        override fun run() {
+            checkDataFlow()
+            handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -48,6 +58,7 @@ class Pc60BleService : Service() {
                 .build()
         )
 
+        handler.postDelayed(dataWatchdog, WATCHDOG_INTERVAL_MS)
         if (sdkRuntime.available) startSdkRuntime() else connectOrScan()
     }
 
@@ -55,8 +66,10 @@ class Pc60BleService : Service() {
         when (intent?.action) {
             ACTION_RESCAN -> {
                 Pc60StatusStore.clearRemembered(this)
+                resetDataWatch()
                 if (sdkRuntime.available) {
                     sdkRuntime.restart()
+                    markStreamStarted()
                 } else {
                     disconnectGatt()
                     startScan()
@@ -78,15 +91,23 @@ class Pc60BleService : Service() {
             updateState("Bluetooth kapalı")
             return
         }
+        resetDataWatch()
+        markStreamStarted()
         updateState("Lepu SDK ile PC-60FW hazırlanıyor")
         sdkRuntime.start(
             context = this,
-            onState = { state -> handler.post { updateState(state) } },
+            onState = { state -> handler.post {
+                updateState(state)
+                if (state.contains("bağ", ignoreCase = true) || state.contains("connect", ignoreCase = true)) {
+                    markStreamStarted()
+                }
+            } },
             onSample = { sample -> handler.post { onSdkSample(sample) } }
         )
     }
 
     private fun onSdkSample(sample: Pc60Sample) {
+        markDataReceived()
         packetCount += 1
         val old = Pc60StatusStore.load(this)
         Pc60StatusStore.save(
@@ -132,6 +153,7 @@ class Pc60BleService : Service() {
         val scanner = adapter?.bluetoothLeScanner ?: return
         if (scanning) return
         scanning = true
+        resetDataWatch()
         updateState("PC-60FW aranıyor (ham BLE teşhis modu)")
         runCatching { scanner.startScan(scanCallback) }
             .onFailure { scanning = false; updateState("Tarama başlatılamadı: ${it.javaClass.simpleName}") }
@@ -172,6 +194,7 @@ class Pc60BleService : Service() {
         disconnectGatt()
         currentName = name
         currentAddress = device.address
+        resetDataWatch()
         updateState("Bağlanıyor (ham BLE teşhis modu)")
         gatt = if (Build.VERSION.SDK_INT >= 23) {
             device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
@@ -187,6 +210,7 @@ class Pc60BleService : Service() {
                 updateState("Bağlandı; servisler okunuyor")
                 runCatching { gatt.discoverServices() }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                resetDataWatch()
                 updateState("Bağlantı koptu; yeniden bağlanacak")
                 runCatching { gatt.close() }
                 if (this@Pc60BleService.gatt === gatt) this@Pc60BleService.gatt = null
@@ -222,6 +246,7 @@ class Pc60BleService : Service() {
                 @Suppress("DEPRECATION")
                 gatt.writeDescriptor(ccc)
             }
+            markStreamStarted()
             updateState("Bağlı; ham BLE verisi bekleniyor")
         }
 
@@ -237,6 +262,7 @@ class Pc60BleService : Service() {
     }
 
     private fun onPacket(bytes: ByteArray) {
+        markDataReceived()
         packetCount += 1
         val old = Pc60StatusStore.load(this)
         Pc60StatusStore.save(
@@ -250,6 +276,50 @@ class Pc60BleService : Service() {
                 lastPacketHex = bytes.take(48).joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
             )
         )
+    }
+
+    private fun markStreamStarted() {
+        if (streamStartedAt == 0L) streamStartedAt = System.currentTimeMillis()
+    }
+
+    private fun markDataReceived() {
+        lastDataAt = System.currentTimeMillis()
+        streamStartedAt = lastDataAt
+        noDataRecoveryAttempts = 0
+    }
+
+    private fun resetDataWatch() {
+        streamStartedAt = 0L
+        lastDataAt = 0L
+        noDataRecoveryAttempts = 0
+    }
+
+    private fun checkDataFlow() {
+        val started = streamStartedAt
+        if (started == 0L) return
+        val now = System.currentTimeMillis()
+        val reference = if (lastDataAt > 0L) lastDataAt else started
+        val timeout = if (lastDataAt > 0L) STREAM_STALL_TIMEOUT_MS else FIRST_DATA_TIMEOUT_MS
+        if (now - reference < timeout) return
+
+        if (noDataRecoveryAttempts >= MAX_NO_DATA_RECOVERY_ATTEMPTS) {
+            updateState("Bağlı fakat veri akmıyor; oksimetreyi/parmağı kontrol et")
+            streamStartedAt = 0L
+            AlarmTimelineStore.add(this, "PC-60FW TEKNİK", "Bağlantı var ancak veri akışı yok; sağlık alarmı üretilmedi")
+            return
+        }
+
+        noDataRecoveryAttempts += 1
+        updateState("PC-60FW veri akışı durdu; bağlantı yenileniyor (${noDataRecoveryAttempts}/$MAX_NO_DATA_RECOVERY_ATTEMPTS)")
+        AlarmTimelineStore.add(this, "PC-60FW RECONNECT", "Veri akışı yok; yeniden bağlanma denemesi $noDataRecoveryAttempts")
+        lastDataAt = 0L
+        streamStartedAt = now
+        if (sdkRuntime.available) {
+            runCatching { sdkRuntime.restart() }
+        } else {
+            disconnectGatt()
+            handler.postDelayed({ connectOrScan() }, RECONNECT_DELAY_MS)
+        }
     }
 
     private fun reconnectSoon() {
@@ -286,6 +356,7 @@ class Pc60BleService : Service() {
         handler.removeCallbacksAndMessages(null)
         if (::sdkRuntime.isInitialized) sdkRuntime.stop()
         disconnectGatt()
+        resetDataWatch()
         updateState("Kapalı")
         super.onDestroy()
     }
@@ -300,6 +371,10 @@ class Pc60BleService : Service() {
         private const val SCAN_WINDOW_MS = 15_000L
         private const val RESCAN_DELAY_MS = 15_000L
         private const val RECONNECT_DELAY_MS = 2_000L
+        private const val WATCHDOG_INTERVAL_MS = 5_000L
+        private const val FIRST_DATA_TIMEOUT_MS = 20_000L
+        private const val STREAM_STALL_TIMEOUT_MS = 8_000L
+        private const val MAX_NO_DATA_RECOVERY_ATTEMPTS = 2
 
         private val SERVICE_UUID = UUID.fromString("0000fff0-0000-1000-8000-00805f9b34fb")
         private val NOTIFY_UUID = UUID.fromString("0000fff1-0000-1000-8000-00805f9b34fb")
