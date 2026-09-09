@@ -29,8 +29,14 @@ class WearCommandService : WearableListenerService() {
             val status = runCatching {
                 val sensor = com.skhealth.guardian.wear.sensor.SamsungSensorGateway(this@WearCommandService)
                 sensor.reconnect()
-                val hr = sensor.measureHeartRate(20_000)
-                if (hr != null) "OK | sensör hazır | nabız=$hr" else "UYARI | sensör yanıt vermedi"
+                val hr = runCatching { sensor.measureHeartRate(20_000) }.getOrNull()
+                val spo2 = runCatching { sensor.measureSpO2(35_000) }.getOrNull()
+                when {
+                    hr != null && spo2 != null -> "OK | HR=$hr bpm | SpO₂=$spo2%"
+                    hr != null -> "UYARI | HR OK ($hr bpm) | SpO₂ yanıt vermedi"
+                    spo2 != null -> "UYARI | SpO₂ OK ($spo2%) | HR yanıt vermedi"
+                    else -> "HATA | HR ve SpO₂ sensörlerinden geçerli yanıt yok"
+                }
             }.getOrElse { "HATA | ${it.javaClass.simpleName}" }
             val nodes = Wearable.getNodeClient(this@WearCommandService).connectedNodes.awaitCompat2()
             nodes.forEach {
