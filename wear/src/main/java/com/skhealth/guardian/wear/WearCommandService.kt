@@ -16,6 +16,7 @@ class WearCommandService : WearableListenerService() {
         when (event.path) {
             "/health/selftest" -> runSelfTest()
             "/health/measure_now" -> startService(Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW))
+            "/health/config" -> WearSettings.decode(event.data)?.let { WearSettings.save(this, it) }
         }
     }
 
