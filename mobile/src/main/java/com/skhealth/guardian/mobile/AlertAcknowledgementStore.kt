@@ -13,18 +13,13 @@ object AlertAcknowledgementStore {
     fun acknowledge(context: Context, alertId: String) {
         if (!AlertIdentity.isValid(alertId)) return
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        synchronized(this) {
-            val ordered = prefs.getString(KEY_ACK_IDS, "")
-                .orEmpty().lines().filter { it.isNotBlank() && it != alertId }.toMutableList()
-            ordered += alertId
-            prefs.edit().putString(KEY_ACK_IDS, ordered.takeLast(MAX_ACK_IDS).joinToString("\n")).apply()
-        }
+        BoundedIdStore.add(prefs, KEY_ACK_IDS, alertId, MAX_ACK_IDS)
     }
 
     fun isAcknowledged(context: Context, alertId: String): Boolean {
         if (!AlertIdentity.isValid(alertId)) return false
-        val raw = context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_ACK_IDS, "").orEmpty()
-        return raw.lineSequence().any { it == alertId }
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        return BoundedIdStore.contains(prefs, KEY_ACK_IDS, alertId)
     }
 
     /**
@@ -36,7 +31,9 @@ object AlertAcknowledgementStore {
         synchronized(this) {
             val current = prefs.getLong(KEY_LAST_ACK, 0L)
             if (alertTimestampMs > current) {
-                prefs.edit().putLong(KEY_LAST_ACK, alertTimestampMs).apply()
+                // ACK is a safety boundary: persist it before returning so a process death cannot
+                // resurrect an already-silenced legacy escalation.
+                prefs.edit().putLong(KEY_LAST_ACK, alertTimestampMs).commit()
             }
         }
     }
