@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.widget.Button
@@ -23,47 +24,26 @@ class SystemTestActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
-        }
-        root.addView(TextView(this).apply { text = "Kurulum / QA sihirbazı"; textSize = 24f })
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 40) }
+        root.addView(TextView(this).apply { text = "Kurulum / QA sihirbazı"; textSize = 27f; setTypeface(typeface, Typeface.BOLD) })
         root.addView(TextView(this).apply {
-            text = "Telefon izinlarını, acil durum kişilerini, Galaxy Watch bağlantısını, veri tazeliğini ve PC-60FW durumunu tek ekranda kontrol eder. Gerçek SMS/arama ve alarm ekranı testleri yalnız sen başlatırsan çalışır."
-            setPadding(0, 16, 0, 16)
+            text = "Telefon, Galaxy Watch, acil kişiler ve PC-60FW zincirini tek ekranda doğrular. Gerçek SMS/arama yalnızca sen başlatırsan çalışır."
+            textSize = 15f; setPadding(0, 10, 0, 18)
         })
-        summary = TextView(this).apply { textSize = 20f; setPadding(0, 8, 0, 16) }
-        output = TextView(this).apply { textSize = 16f }
+        summary = TextView(this).apply { textSize = 22f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 8, 0, 16) }
+        output = TextView(this).apply { textSize = 16f; setPadding(0, 0, 0, 18) }
         root.addView(summary)
         root.addView(output)
-        root.addView(Button(this).apply {
-            text = "Tüm kontrolleri yenile"
-            setOnClickListener { runPreflight() }
-        })
-        root.addView(Button(this).apply {
-            text = "Saat self-test + manuel ölçüm"
-            setOnClickListener { runWatchTest() }
-        })
-        root.addView(Button(this).apply {
-            text = "PC-60FW ekranını aç"
-            setOnClickListener { startActivity(Intent(this@SystemTestActivity, Pc60Activity::class.java)) }
-        })
-        root.addView(Button(this).apply {
-            text = "Alarm ekranını güvenli test et"
-            setOnClickListener { previewAlarmScreen() }
-        })
-        root.addView(Button(this).apply {
-            text = "Gerçek SMS + arama testi"
-            setOnClickListener { confirmRealCommunicationTest() }
-        })
+        root.addView(Button(this).apply { text = "Kontrolleri yeniden çalıştır"; setOnClickListener { runPreflight() } })
+        root.addView(Button(this).apply { text = "Galaxy Watch self-test + ölçüm"; setOnClickListener { runWatchTest() } })
+        root.addView(Button(this).apply { text = "PC-60FW durumunu aç"; setOnClickListener { startActivity(Intent(this@SystemTestActivity, Pc60Activity::class.java)) } })
+        root.addView(Button(this).apply { text = "Alarm ekranını güvenli test et"; setOnClickListener { previewAlarmScreen() } })
+        root.addView(Button(this).apply { text = "GERÇEK SMS + ARAMA TESTİ"; setOnClickListener { confirmRealCommunicationTest() } })
         setContentView(ScrollView(this).apply { addView(root) })
         runPreflight()
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (::output.isInitialized) runPreflight()
-    }
+    override fun onResume() { super.onResume(); if (::output.isInitialized) runPreflight() }
 
     private fun runPreflight() {
         val contacts = ContactStore.contacts(this)
@@ -86,17 +66,16 @@ class SystemTestActivity : Activity() {
 
         val lines = mutableListOf<String>()
         required.forEach { (label, ok) -> lines += status(label, ok) }
-        lines += info("Son Watch verisi", if (lastReading == 0L) "henüz yok" else formatAge(lastReading) + if (watchDataFresh) " • taze" else " • eski")
-        lines += info("Saat son durumu", WatchStatusStore.status(this))
-        lines += if (!pc60Configured) "○ PC-60FW: henüz yapılandırılmamış (Watch ile kullanım mümkün)" else status("PC-60FW geçerli veri akışı", pc60Fresh) + " • ${pc60.state}"
+        lines += info("Watch verisi", if (lastReading == 0L) "henüz yok" else formatAge(lastReading) + if (watchDataFresh) " • taze" else " • eski")
+        lines += info("Saat durumu", WatchStatusStore.status(this))
+        lines += if (!pc60Configured) "○ PC-60FW isteğe bağlı • henüz yapılandırılmamış" else status("PC-60FW geçerli veri akışı", pc60Fresh) + " • ${pc60.state}"
         if (pc60Configured && pc60.lastPacketAt > 0) lines += info("PC-60FW son paket", formatAge(pc60.lastPacketAt))
         lines += info("Aktif alarm kaynağı", SourcePriorityCoordinator.activeSourceLabel(this))
-
-        output.text = lines.joinToString("\n") + "\nSaat bağlantısı kontrol ediliyor…"
+        output.text = lines.joinToString("\n") + "\n• Galaxy Watch bağlantısı kontrol ediliyor…"
         val localOk = required.all { it.second }
 
         if (Build.VERSION.SDK_INT >= 31 && !has(Manifest.permission.BLUETOOTH_CONNECT)) {
-            showSummary(false, listOf("Bluetooth bağlantı izni eksik"))
+            showSummary(false, listOf("Bluetooth bağlantı izni eksik"), required.count { it.second }, required.size + 1)
             return
         }
 
@@ -106,43 +85,31 @@ class SystemTestActivity : Activity() {
             val missing = required.filterNot { it.second }.map { it.first }.toMutableList()
             if (!watchConnected) missing += "Galaxy Watch bağlantısı"
             if (pc60Configured && !pc60Fresh) missing += "PC-60FW geçerli/taze veri akışı"
-            showSummary(localOk && watchConnected && (!pc60Configured || pc60Fresh), missing)
+            val total = required.size + 1 + if (pc60Configured) 1 else 0
+            val passed = total - missing.size
+            showSummary(localOk && watchConnected && (!pc60Configured || pc60Fresh), missing, passed, total)
             AlarmTimelineStore.add(this, "QA ÖN KONTROL", if (missing.isEmpty()) "Sistem hazır" else "Eksikler: ${missing.joinToString()}")
         }.addOnFailureListener {
             output.append("\n✗ Saat bağlantısı okunamadı: ${it.javaClass.simpleName}")
-            showSummary(false, listOf("Saat bağlantısı okunamadı"))
+            showSummary(false, listOf("Saat bağlantısı okunamadı"), 0, required.size + 1)
         }
     }
 
-    private fun showSummary(ready: Boolean, missing: List<String>) {
-        summary.text = if (ready) {
-            "✓ SİSTEM HAZIR"
-        } else {
-            "⚠ EKSİKLER VAR (${missing.size})\n" + missing.joinToString("\n") { "• $it" }
-        }
+    private fun showSummary(ready: Boolean, missing: List<String>, passed: Int, total: Int) {
+        summary.text = if (ready) "✓ SİSTEM HAZIR\n$passed/$total kontrol başarılı" else "⚠ EKSİKLER VAR\n$passed/$total kontrol başarılı" + if (missing.isEmpty()) "" else "\n${missing.joinToString("\n") { "• $it" }}"
     }
 
     private fun runWatchTest() {
         val cfg = AppSettings.load(this)
-        if (Build.VERSION.SDK_INT >= 31 && !has(Manifest.permission.BLUETOOTH_CONNECT)) {
-            output.append("\n✗ Saat testi: Bluetooth bağlantı izni yok")
-            return
-        }
+        if (Build.VERSION.SDK_INT >= 31 && !has(Manifest.permission.BLUETOOTH_CONNECT)) { output.append("\n✗ Saat testi: Bluetooth bağlantı izni yok"); return }
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
-            if (nodes.isEmpty()) {
-                output.append("\n✗ Saat testi: saat bağlı değil")
-                return@addOnSuccessListener
-            }
+            if (nodes.isEmpty()) { output.append("\n✗ Saat testi: saat bağlı değil"); return@addOnSuccessListener }
             WatchCommandSender(this).sendConfig(cfg)
-            nodes.forEach { node ->
-                Wearable.getMessageClient(this).sendMessage(node.id, "/health/selftest", "qa-wizard".toByteArray())
-            }
+            nodes.forEach { node -> Wearable.getMessageClient(this).sendMessage(node.id, "/health/selftest", "qa-wizard".toByteArray()) }
             WatchCommandSender(this).requestMeasurement()
             output.append("\n✓ Config gönderildi\n✓ Saat self-test gönderildi\n✓ Manuel ölçüm istendi")
             AlarmTimelineStore.add(this, "QA SAAT TESTİ", "Config + self-test + manuel ölçüm gönderildi")
-        }.addOnFailureListener {
-            output.append("\n✗ Saat testi başarısız: ${it.javaClass.simpleName}")
-        }
+        }.addOnFailureListener { output.append("\n✗ Saat testi başarısız: ${it.javaClass.simpleName}") }
     }
 
     private fun previewAlarmScreen() {
@@ -157,24 +124,14 @@ class SystemTestActivity : Activity() {
     }
 
     private fun confirmRealCommunicationTest() {
-        AlertDialog.Builder(this)
-            .setTitle("Gerçek iletişim testi")
-            .setMessage("Bu test gerçek SMS gönderir ve tanımlı arama kişisini gerçekten arar. Devam edilsin mi?")
-            .setNegativeButton("İptal", null)
-            .setPositiveButton("Testi başlat") { _, _ -> runRealCommunicationTest() }
-            .show()
+        AlertDialog.Builder(this).setTitle("Gerçek iletişim testi").setMessage("Bu test gerçek SMS gönderir ve tanımlı arama kişisini gerçekten arar. Devam edilsin mi?").setNegativeButton("İptal", null).setPositiveButton("Testi başlat") { _, _ -> runRealCommunicationTest() }.show()
     }
 
     private fun runRealCommunicationTest() {
         val contacts = ContactStore.contacts(this)
         val smsTarget = contacts.firstOrNull { it.smsEnabled }
-        val smsOk = smsTarget?.let {
-            SmsSender(this).send(it.phoneNumber, "SK Health Guardian QA TESTİ - bu gerçek bir test mesajıdır.")
-        } ?: false
-        if (smsTarget != null) {
-            DeliveryLogStore.add(this, "SMS QA TEST", mask(smsTarget.phoneNumber), smsOk, if (smsOk) "modem kuyruğuna alındı" else "başlatılamadı")
-        }
-
+        val smsOk = smsTarget?.let { SmsSender(this).send(it.phoneNumber, "SK Health Guardian QA TESTİ - bu gerçek bir test mesajıdır.") } ?: false
+        if (smsTarget != null) DeliveryLogStore.add(this, "SMS QA TEST", mask(smsTarget.phoneNumber), smsOk, if (smsOk) "modem kuyruğuna alındı" else "başlatılamadı")
         var callOk = false
         var callTarget: String? = null
         for (contact in contacts.filter { it.callEnabled }) {
@@ -190,11 +147,7 @@ class SystemTestActivity : Activity() {
     private fun formatAge(timestampMs: Long): String {
         val ageSec = ((System.currentTimeMillis() - timestampMs).coerceAtLeast(0L) / 1000L)
         val clock = SimpleDateFormat("HH:mm:ss", Locale("tr", "TR")).format(Date(timestampMs))
-        return when {
-            ageSec < 60 -> "$clock • ${ageSec} sn önce"
-            ageSec < 3600 -> "$clock • ${ageSec / 60} dk önce"
-            else -> "$clock • ${ageSec / 3600} sa önce"
-        }
+        return when { ageSec < 60 -> "$clock • ${ageSec} sn önce"; ageSec < 3600 -> "$clock • ${ageSec / 60} dk önce"; else -> "$clock • ${ageSec / 3600} sa önce" }
     }
 
     private fun status(label: String, ok: Boolean) = (if (ok) "✓ " else "✗ ") + label
