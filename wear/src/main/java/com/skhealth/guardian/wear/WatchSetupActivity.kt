@@ -4,10 +4,13 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -17,8 +20,10 @@ import androidx.core.content.ContextCompat
 
 class WatchSetupActivity : Activity() {
     private lateinit var root: LinearLayout
-    private lateinit var status: TextView
-    private lateinit var summary: TextView
+    private lateinit var stateText: TextView
+    private lateinit var valuesText: TextView
+    private lateinit var freshnessText: TextView
+    private lateinit var primaryButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,60 +32,124 @@ class WatchSetupActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::status.isInitialized) refreshStatus()
+        if (::stateText.isInitialized) refresh()
     }
 
     private fun render() {
+        window.statusBarColor = Color.BLACK
+        window.navigationBarColor = Color.BLACK
         val compact = resources.configuration.screenWidthDp < 220 || resources.configuration.fontScale >= 1.25f
-        val sidePadding = if (compact) 18 else 24
+        val pad = if (compact) 14 else 20
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(sidePadding, 20, sidePadding, 32)
+            setPadding(pad, 18, pad, 28)
+            setBackgroundColor(Color.BLACK)
         }
         setContentView(ScrollView(this).apply {
             isFillViewport = true
-            isVerticalScrollBarEnabled = true
+            isVerticalScrollBarEnabled = false
+            setBackgroundColor(Color.BLACK)
             addView(root)
         })
 
         root.addView(TextView(this).apply {
-            text = "Health Guardian"
-            textSize = if (compact) 19f else 22f
+            text = "SK Guardian"
+            setTextColor(Color.WHITE)
+            textSize = if (compact) 18f else 20f
             gravity = Gravity.CENTER
-            maxLines = 2
             setTypeface(typeface, Typeface.BOLD)
         })
-        summary = TextView(this).apply {
-            textSize = if (compact) 17f else 19f
+
+        stateText = TextView(this).apply {
+            textSize = if (compact) 20f else 22f
             gravity = Gravity.CENTER
-            maxLines = 2
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, 12, 0, 8)
+            setPadding(0, 10, 0, 10)
         }
-        root.addView(summary)
-        root.addView(TextView(this).apply {
-            text = "SpO₂ ve nabız izleme • kritik durumda saat alarmı + telefon bildirimi"
+        root.addView(stateText)
+
+        valuesText = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = if (compact) 25f else 29f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 8, 0, 4)
+        }
+        root.addView(valuesText)
+
+        freshnessText = TextView(this).apply {
+            setTextColor(Color.rgb(180, 184, 190))
             textSize = 13f
             gravity = Gravity.CENTER
-            setPadding(6, 0, 6, 14)
-        })
-        status = TextView(this).apply {
-            textSize = 14f
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 2, 0, 12)
+            setPadding(0, 0, 0, 16)
         }
-        root.addView(status)
-        root.addView(actionButton("İzinleri tamamla") { requestSensorPermissions() })
-        root.addView(actionButton("İzlemeyi başlat") { startMonitoringIfReady() })
-        refreshStatus()
+        root.addView(freshnessText)
+
+        primaryButton = Button(this).apply {
+            minHeight = dp(50)
+            isAllCaps = false
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = rounded(Color.rgb(28, 116, 210), 28f)
+            setOnClickListener { onPrimaryAction() }
+        }
+        root.addView(primaryButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        root.addView(TextView(this).apply {
+            text = "Ayarlar telefondan yönetilir"
+            setTextColor(Color.rgb(130, 134, 142))
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(0, 12, 0, 0)
+        })
+        refresh()
     }
 
-    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
-        text = label
-        minHeight = dp(48)
-        isAllCaps = false
-        setOnClickListener { action() }
+    private fun onPrimaryAction() {
+        if (!hasSensorPermissions() || (Build.VERSION.SDK_INT >= 36 && !has(PERM_READ_HEALTH_DATA_IN_BACKGROUND))) {
+            requestSensorPermissions()
+            return
+        }
+        startMonitoringIfReady()
+        runCatching {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW)
+            )
+        }
+        primaryButton.text = "Ölçüm başlatıldı"
+        primaryButton.isEnabled = false
+        primaryButton.postDelayed({ primaryButton.isEnabled = true; refresh() }, 5000)
+    }
+
+    private fun refresh() {
+        val permissionsOk = hasSensorPermissions() && (Build.VERSION.SDK_INT < 36 || has(PERM_READ_HEALTH_DATA_IN_BACKGROUND))
+        val status = WearStatusStore.load(this)
+        val now = System.currentTimeMillis()
+        val age = if (status.lastReadingAt > 0) (now - status.lastReadingAt).coerceAtLeast(0) else Long.MAX_VALUE
+
+        if (!permissionsOk) {
+            stateText.text = "○ Kurulum gerekli"
+            stateText.setTextColor(Color.rgb(255, 190, 70))
+            valuesText.text = "SpO₂ —   ♥ —"
+            freshnessText.text = "Sensör izinlerini tamamla"
+            primaryButton.text = "İzinleri tamamla"
+            return
+        }
+
+        startMonitoringIfReady()
+        stateText.text = if (age == Long.MAX_VALUE || age > 15 * 60_000L) "○ Veri bekleniyor" else "● İzleme aktif"
+        stateText.setTextColor(if (age == Long.MAX_VALUE || age > 15 * 60_000L) Color.rgb(255, 190, 70) else Color.rgb(58, 214, 126))
+        valuesText.text = "SpO₂ ${status.spo2?.let { "$it%" } ?: "—"}   ♥ ${status.heartRate?.toString() ?: "—"}"
+        freshnessText.text = when {
+            age == Long.MAX_VALUE -> "Henüz ölçüm yok"
+            age < 5_000L -> "Son ölçüm: şimdi"
+            age < 60_000L -> "Son ölçüm: ${age / 1000} sn önce"
+            else -> "Son ölçüm: ${age / 60_000} dk önce"
+        }
+        primaryButton.text = "Şimdi ölç"
     }
 
     private fun requestSensorPermissions() {
@@ -100,33 +169,21 @@ class WatchSetupActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
-            REQ_SENSORS -> if (hasSensorPermissions()) requestBackgroundPermission() else refreshStatus()
-            REQ_BACKGROUND -> startMonitoringIfReady()
+            REQ_SENSORS -> if (hasSensorPermissions()) requestBackgroundPermission() else refresh()
+            REQ_BACKGROUND -> { startMonitoringIfReady(); refresh() }
         }
     }
 
     private fun startMonitoringIfReady() {
-        refreshStatus()
         if (!hasSensorPermissions()) return
         if (Build.VERSION.SDK_INT >= 36 && !has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)) return
         runCatching { ContextCompat.startForegroundService(this, Intent(this, MonitorService::class.java)) }
-            .onSuccess { summary.text = "✓ İZLEME AKTİF"; status.append("\n✓ İzleme servisi çalışıyor") }
-            .onFailure { summary.text = "✗ BAŞLATILAMADI"; status.append("\n✗ İzleme servisi başlatılamadı") }
     }
 
-    private fun refreshStatus() {
-        val hr = has(PERM_READ_HEART_RATE)
-        val spo2 = has(PERM_READ_OXYGEN_SATURATION)
-        val background = Build.VERSION.SDK_INT < 36 || has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)
-        val notifications = Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS)
-        val okCount = listOf(hr, spo2, background, notifications).count { it }
-        summary.text = if (okCount == 4) "✓ SAAT HAZIR" else "○ $okCount/4 HAZIR"
-        status.text = buildString {
-            append(if (hr) "✓" else "✗").append(" Nabız\n")
-            append(if (spo2) "✓" else "✗").append(" SpO₂\n")
-            append(if (background) "✓" else "✗").append(" Arka plan\n")
-            append(if (notifications) "✓" else "✗").append(" Bildirim")
-        }
+    private fun rounded(color: Int, radiusDp: Float) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = dp(radiusDp.toInt()).toFloat()
     }
 
     private fun hasSensorPermissions() = has(PERM_READ_HEART_RATE) && has(PERM_READ_OXYGEN_SATURATION)
