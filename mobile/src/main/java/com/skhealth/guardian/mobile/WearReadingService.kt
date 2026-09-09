@@ -10,6 +10,7 @@ import com.skhealth.guardian.shared.HealthReading
 class WearReadingService : WearableListenerService() {
     private var engine: AlarmEngine? = null
     private var activeConfig: com.skhealth.guardian.shared.AlarmConfig? = null
+    private var activeStateSignature: String? = null
     private var lastSpo2Pc60: Boolean? = null
     private var lastHrPc60: Boolean? = null
 
@@ -83,10 +84,13 @@ class WearReadingService : WearableListenerService() {
 
         val spo2Pc60 = SourcePriorityCoordinator.isPc60Spo2Authoritative(this, receivedAt)
         val hrPc60 = SourcePriorityCoordinator.isPc60HeartRateAuthoritative(this, receivedAt)
+        val stateSignature = AlarmEngineStateStore.signature(cfg, spo2Pc60, hrPc60)
 
         if (lastSpo2Pc60 != null && (lastSpo2Pc60 != spo2Pc60 || lastHrPc60 != hrPc60)) {
             engine = null
             activeConfig = null
+            activeStateSignature = null
+            AlarmEngineStateStore.clear(this)
         }
         lastSpo2Pc60 = spo2Pc60
         lastHrPc60 = hrPc60
@@ -106,12 +110,19 @@ class WearReadingService : WearableListenerService() {
         )
         if (alarmReading.spo2 == null && alarmReading.heartRate == null) return
 
-        val e = if (engine == null || activeConfig != cfg) {
+        val e = if (engine == null || activeConfig != cfg || activeStateSignature != stateSignature) {
             activeConfig = cfg
-            AlarmEngine(cfg).also { engine = it }
+            activeStateSignature = stateSignature
+            AlarmEngine(cfg).also { fresh ->
+                AlarmEngineStateStore.load(this, stateSignature)?.let(fresh::restore)
+                engine = fresh
+            }
         } else engine!!
+
         val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
-        e.evaluate(alarmReading).forEach { AlertDispatcher(this).dispatch(it, recent, alarmReading) }
+        val alerts = e.evaluate(alarmReading)
+        AlarmEngineStateStore.save(this, stateSignature, e.snapshot())
+        alerts.forEach { AlertDispatcher(this).dispatch(it, recent, alarmReading) }
     }
 
     companion object {
