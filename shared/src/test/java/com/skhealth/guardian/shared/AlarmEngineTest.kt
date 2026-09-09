@@ -74,6 +74,26 @@ class AlarmEngineTest {
     }
 
     @Test
+    fun restoredCriticalEpisodeDoesNotAlarmAgainUntilRecovery() {
+        val first = AlarmEngine(config)
+        assertEquals(AlertType.SPO2_CRITICAL, first.evaluate(HealthReading(timestampMs = 1L, spo2 = 79)).single().type)
+        val restored = AlarmEngine(config)
+        restored.restore(first.snapshot())
+        assertTrue(restored.evaluate(HealthReading(timestampMs = 2L, spo2 = 78)).isEmpty())
+        assertTrue(restored.evaluate(HealthReading(timestampMs = 3L, spo2 = 95)).isEmpty())
+        assertEquals(AlertType.SPO2_CRITICAL, restored.evaluate(HealthReading(timestampMs = 4L, spo2 = 77)).single().type)
+    }
+
+    @Test
+    fun restoredPendingLowCounterContinuesConfirmation() {
+        val first = AlarmEngine(config)
+        assertTrue(first.evaluate(HealthReading(timestampMs = 1L, spo2 = 85)).isEmpty())
+        val restored = AlarmEngine(config)
+        restored.restore(first.snapshot())
+        assertEquals(AlertType.SPO2_LOW_CONFIRMED, restored.evaluate(HealthReading(timestampMs = 2L, spo2 = 86)).single().type)
+    }
+
+    @Test
     fun heartRateAbove130RequiresTwoValidReadings() {
         val engine = AlarmEngine(config)
         assertTrue(engine.evaluate(HealthReading(timestampMs = 1L, heartRate = 131)).isEmpty())
