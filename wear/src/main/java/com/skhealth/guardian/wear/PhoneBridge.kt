@@ -3,6 +3,7 @@ package com.skhealth.guardian.wear
 import android.content.Context
 import com.google.android.gms.wearable.Wearable
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.PendingAckPolicy
 
 class PhoneBridge(private val context: Context) {
     private val prefs = context.getSharedPreferences("phone_bridge_queue", Context.MODE_PRIVATE)
@@ -54,7 +55,7 @@ class PhoneBridge(private val context: Context) {
                         .addOnCompleteListener {
                             remaining--
                             if (remaining == 0) {
-                                if (allOk) clearPendingAck() else savePendingAck(payload)
+                                if (allOk) clearPendingAckIfNotNewerThan(alertTimestampMs) else savePendingAck(payload)
                             }
                         }
                 }
@@ -63,26 +64,29 @@ class PhoneBridge(private val context: Context) {
     }
 
     private suspend fun flushQueued(nodeIds: List<String>) {
-        val queued = loadQueue().toMutableList()
+        val queued = synchronized(this) { loadQueue() }
         if (queued.isEmpty()) return
-        val remaining = mutableListOf<String>()
+        val delivered = mutableSetOf<String>()
         queued.forEach { payload ->
             val bytes = payload.toByteArray()
             val ok = nodeIds.all { id ->
                 runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/reading", bytes).awaitCompat() }.isSuccess
             }
-            if (!ok) remaining += payload
+            if (ok) delivered += payload
         }
-        saveQueue(remaining)
+        if (delivered.isNotEmpty()) removeDelivered(delivered)
     }
 
     private suspend fun flushAlarmAcknowledgement(nodeIds: List<String>) {
-        val payload = prefs.getString(KEY_PENDING_ACK, null) ?: return
+        val payload = synchronized(this) { prefs.getString(KEY_PENDING_ACK, null) } ?: return
         val bytes = payload.toByteArray()
         val ok = nodeIds.all { id ->
             runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }.isSuccess
         }
-        if (ok) clearPendingAck()
+        if (ok) {
+            val sentTs = payload.substringBefore('|').toLongOrNull() ?: Long.MIN_VALUE
+            clearPendingAckIfNotNewerThan(sentTs)
+        }
     }
 
     private fun encode(reading: HealthReading): String = listOf(
@@ -94,9 +98,10 @@ class PhoneBridge(private val context: Context) {
         reading.source
     ).joinToString("|")
 
+    @Synchronized
     private fun enqueue(payload: String) {
         val q = loadQueue().toMutableList()
-        if (q.lastOrNull() != payload) q += payload
+        if (!q.contains(payload)) q += payload
         saveQueue(q.takeLast(MAX_QUEUE))
     }
 
@@ -107,12 +112,23 @@ class PhoneBridge(private val context: Context) {
         prefs.edit().putString(KEY_QUEUE, items.joinToString("\n")).apply()
     }
 
-    private fun savePendingAck(payload: String) {
-        prefs.edit().putString(KEY_PENDING_ACK, payload).apply()
+    @Synchronized
+    private fun removeDelivered(delivered: Set<String>) {
+        val current = loadQueue()
+        saveQueue(current.filterNot { it in delivered })
     }
 
-    private fun clearPendingAck() {
-        prefs.edit().remove(KEY_PENDING_ACK).apply()
+    @Synchronized
+    private fun savePendingAck(payload: String) {
+        val current = prefs.getString(KEY_PENDING_ACK, null)
+        prefs.edit().putString(KEY_PENDING_ACK, PendingAckPolicy.newest(current, payload)).apply()
+    }
+
+    @Synchronized
+    private fun clearPendingAckIfNotNewerThan(sentTimestampMs: Long) {
+        val current = prefs.getString(KEY_PENDING_ACK, null) ?: return
+        val currentTs = current.substringBefore('|').toLongOrNull() ?: Long.MIN_VALUE
+        if (currentTs <= sentTimestampMs) prefs.edit().remove(KEY_PENDING_ACK).apply()
     }
 
     companion object {
