@@ -9,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
+import com.skhealth.guardian.shared.AlertIdentity
 
 object LocalAlarm {
     const val NOTIFICATION_ID = 99
@@ -24,10 +25,12 @@ object LocalAlarm {
         })
 
         val reading = alert.reading
+        val alertId = AlertIdentity.of(alert)
         val alarmIntent = Intent(context, WearAlarmActivity::class.java).apply {
             putExtra(WearAlarmActivity.EXTRA_REASON, alert.message)
             putExtra(WearAlarmActivity.EXTRA_SPO2, reading?.spo2 ?: -1)
             putExtra(WearAlarmActivity.EXTRA_HR, reading?.heartRate ?: -1)
+            putExtra(WearAlarmActivity.EXTRA_ALERT_ID, alertId)
             putExtra(WearAlarmActivity.EXTRA_ALERT_TS, alert.timestampMs)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
