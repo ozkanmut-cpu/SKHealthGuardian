@@ -11,7 +11,15 @@ class SmsRetryReceiver : BroadcastReceiver() {
         val messageId = intent.getStringExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID) ?: return
         val attempt = intent.getIntExtra(SmsStatusReceiver.EXTRA_ATTEMPT, 1)
         val target = intent.getStringExtra(SmsStatusReceiver.EXTRA_TARGET) ?: "****"
-        val ok = SmsSender(context).send(number, message, messageId, attempt)
+        val alertTs = intent.getLongExtra(SmsStatusReceiver.EXTRA_ALERT_TS, 0L)
+
+        if (alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) {
+            DeliveryLogStore.add(context, "SMS RETRY", target, false, "alarm susturuldu; yeniden gönderim iptal edildi")
+            AlarmTimelineStore.add(context, "SMS RETRY İPTAL", "$target • alarm susturulduğu için yeniden gönderim yapılmadı", alertTs)
+            return
+        }
+
+        val ok = SmsSender(context).send(number, message, messageId, attempt, alertTs)
         DeliveryLogStore.add(
             context,
             "SMS RETRY",
