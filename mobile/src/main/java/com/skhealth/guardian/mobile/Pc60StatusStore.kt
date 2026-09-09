@@ -19,39 +19,31 @@ data class Pc60Status(
 
 object Pc60StatusStore {
     private const val PREF = "pc60_status"
+    private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
 
-    @Synchronized
     fun save(context: Context, status: Pc60Status) {
-        val current = load(context)
-        val incomingIsOlder = status.lastPacketAt > 0L && current.lastPacketAt > 0L && status.lastPacketAt < current.lastPacketAt
-        val merged = if (incomingIsOlder) {
-            current.copy(
-                state = status.state,
-                deviceName = status.deviceName.ifBlank { current.deviceName },
-                address = status.address.ifBlank { current.address },
-                packetCount = maxOf(current.packetCount, status.packetCount)
-            )
-        } else {
-            status.copy(
-                lastPacketAt = maxOf(current.lastPacketAt, status.lastPacketAt),
-                packetCount = maxOf(current.packetCount, status.packetCount)
-            )
+        val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        synchronized(this) {
+            val currentLast = p.getLong("last_packet", 0L)
+            val currentCount = p.getLong("packet_count", 0L)
+            val incomingIsOlder = status.lastPacketAt > 0L && currentLast > 0L && status.lastPacketAt < currentLast
+            val e = p.edit()
+                .putString("state", status.state)
+                .putString("name", status.deviceName)
+                .putString("address", status.address)
+                .putLong("packet_count", maxOf(currentCount, status.packetCount))
+            if (!incomingIsOlder) {
+                e.putLong("last_packet", maxOf(currentLast, status.lastPacketAt))
+                    .putString("last_hex", status.lastPacketHex)
+                    .putInt("spo2", status.spo2 ?: -1)
+                    .putInt("heart_rate", status.heartRate ?: -1)
+                    .putLong("pi_bits", java.lang.Double.doubleToRawLongBits(status.perfusionIndex ?: Double.NaN))
+                    .putInt("battery", status.batteryLevel ?: -1)
+                    .putBoolean("probe_off", status.probeOff)
+                    .putBoolean("pulse_searching", status.pulseSearching)
+            }
+            e.apply()
         }
-
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
-            .putString("state", merged.state)
-            .putString("name", merged.deviceName)
-            .putString("address", merged.address)
-            .putLong("last_packet", merged.lastPacketAt)
-            .putLong("packet_count", merged.packetCount)
-            .putString("last_hex", merged.lastPacketHex)
-            .putInt("spo2", merged.spo2 ?: -1)
-            .putInt("heart_rate", merged.heartRate ?: -1)
-            .putLong("pi_bits", java.lang.Double.doubleToRawLongBits(merged.perfusionIndex ?: Double.NaN))
-            .putInt("battery", merged.batteryLevel ?: -1)
-            .putBoolean("probe_off", merged.probeOff)
-            .putBoolean("pulse_searching", merged.pulseSearching)
-            .apply()
     }
 
     fun load(context: Context): Pc60Status {
@@ -72,6 +64,13 @@ object Pc60StatusStore {
             pulseSearching = p.getBoolean("pulse_searching", false)
         )
     }
+
+    fun setMonitoringEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean(KEY_MONITORING_ENABLED, enabled).apply()
+    }
+
+    fun monitoringEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_MONITORING_ENABLED, false)
 
     fun savedAddress(context: Context): String =
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString("preferred_address", "") ?: ""
