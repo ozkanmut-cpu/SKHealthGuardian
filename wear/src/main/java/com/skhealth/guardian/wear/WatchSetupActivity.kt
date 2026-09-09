@@ -31,47 +31,56 @@ class WatchSetupActivity : Activity() {
     }
 
     private fun render() {
+        val compact = resources.configuration.screenWidthDp < 220 || resources.configuration.fontScale >= 1.25f
+        val sidePadding = if (compact) 18 else 24
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(24, 24, 24, 28)
+            setPadding(sidePadding, 20, sidePadding, 32)
         }
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = true
+            addView(root)
+        })
 
         root.addView(TextView(this).apply {
-            text = "SK Health Guardian"
-            textSize = 22f
+            text = "Health Guardian"
+            textSize = if (compact) 19f else 22f
             gravity = Gravity.CENTER
+            maxLines = 2
             setTypeface(typeface, Typeface.BOLD)
         })
         summary = TextView(this).apply {
-            textSize = 19f
+            textSize = if (compact) 17f else 19f
             gravity = Gravity.CENTER
+            maxLines = 2
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, 14, 0, 8)
+            setPadding(0, 12, 0, 8)
         }
         root.addView(summary)
         root.addView(TextView(this).apply {
-            text = "Saat, SpO₂ ve nabzı izler; kritik durumda yerel alarm verir ve veriyi telefona aktarır."
-            textSize = 14f
+            text = "SpO₂ ve nabız izleme • kritik durumda saat alarmı + telefon bildirimi"
+            textSize = 13f
             gravity = Gravity.CENTER
-            setPadding(8, 0, 8, 16)
+            setPadding(6, 0, 6, 14)
         })
         status = TextView(this).apply {
-            textSize = 15f
+            textSize = 14f
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 4, 0, 14)
+            setPadding(0, 2, 0, 12)
         }
         root.addView(status)
-        root.addView(Button(this).apply {
-            text = "İzinleri tamamla"
-            setOnClickListener { requestSensorPermissions() }
-        })
-        root.addView(Button(this).apply {
-            text = "İzlemeyi başlat"
-            setOnClickListener { startMonitoringIfReady() }
-        })
+        root.addView(actionButton("İzinleri tamamla") { requestSensorPermissions() })
+        root.addView(actionButton("İzlemeyi başlat") { startMonitoringIfReady() })
         refreshStatus()
+    }
+
+    private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
+        text = label
+        minHeight = dp(48)
+        isAllCaps = false
+        setOnClickListener { action() }
     }
 
     private fun requestSensorPermissions() {
@@ -101,8 +110,8 @@ class WatchSetupActivity : Activity() {
         if (!hasSensorPermissions()) return
         if (Build.VERSION.SDK_INT >= 36 && !has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)) return
         runCatching { ContextCompat.startForegroundService(this, Intent(this, MonitorService::class.java)) }
-            .onSuccess { summary.text = "İZLEME AKTİF"; status.append("\n✓ İzleme servisi çalışıyor") }
-            .onFailure { summary.text = "BAŞLATILAMADI"; status.append("\n✗ İzleme servisi başlatılamadı") }
+            .onSuccess { summary.text = "✓ İZLEME AKTİF"; status.append("\n✓ İzleme servisi çalışıyor") }
+            .onFailure { summary.text = "✗ BAŞLATILAMADI"; status.append("\n✗ İzleme servisi başlatılamadı") }
     }
 
     private fun refreshStatus() {
@@ -111,17 +120,18 @@ class WatchSetupActivity : Activity() {
         val background = Build.VERSION.SDK_INT < 36 || has(PERM_READ_HEALTH_DATA_IN_BACKGROUND)
         val notifications = Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS)
         val okCount = listOf(hr, spo2, background, notifications).count { it }
-        summary.text = if (okCount == 4) "SAAT HAZIR" else "$okCount/4 HAZIR"
+        summary.text = if (okCount == 4) "✓ SAAT HAZIR" else "○ $okCount/4 HAZIR"
         status.text = buildString {
             append(if (hr) "✓" else "✗").append(" Nabız\n")
             append(if (spo2) "✓" else "✗").append(" SpO₂\n")
-            append(if (background) "✓" else "✗").append(" Arka plan izleme\n")
-            append(if (notifications) "✓" else "✗").append(" Alarm bildirimi")
+            append(if (background) "✓" else "✗").append(" Arka plan\n")
+            append(if (notifications) "✓" else "✗").append(" Bildirim")
         }
     }
 
     private fun hasSensorPermissions() = has(PERM_READ_HEART_RATE) && has(PERM_READ_OXYGEN_SATURATION)
     private fun has(permission: String) = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val REQ_SENSORS = 100
