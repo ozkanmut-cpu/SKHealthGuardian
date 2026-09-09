@@ -1,0 +1,104 @@
+name: Release APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (example: v0.7.0)"
+        required: false
+        default: "v0.7.0"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/release.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Test, build and publish prerelease
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+
+      - name: Resolve release tag
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' mobile/build.gradle.kts | head -n1)
+            TAG="v${VERSION}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]; then
+            echo "Invalid tag: $TAG" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $TAG"
+
+      - name: Stop if release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists; nothing to do."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run shared alarm tests
+        if: steps.existing.outputs.exists != 'true'
+        run: gradle --no-daemon --stacktrace :shared:testDebugUnitTest
+
+      - name: Build mobile and Wear APKs
+        if: steps.existing.outputs.exists != 'true'
+        run: gradle --no-daemon --stacktrace :mobile:assembleDebug :wear:assembleDebug
+
+      - name: Stage release APKs
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        run: |
+          cp mobile/build/outputs/apk/debug/mobile-debug.apk SKHealthGuardian-mobile-v0.7.0-debug.apk
+          cp wear/build/outputs/apk/debug/wear-debug.apk SKHealthGuardian-wear-v0.7.0-debug.apk
+
+      - name: Create GitHub prerelease
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          gh release create "$TAG" \
+            SKHealthGuardian-mobile-v0.7.0-debug.apk \
+            SKHealthGuardian-wear-v0.7.0-debug.apk \
+            --target "$GITHUB_SHA" \
+            --title "SK Health Guardian $TAG" \
+            --prerelease \
+            --generate-notes
