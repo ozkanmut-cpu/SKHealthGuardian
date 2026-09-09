@@ -12,9 +12,12 @@ import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.wear.sensor.SamsungSensorGateway
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class MonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val measurementMutex = Mutex()
     private lateinit var sensor: SensorGateway
     private lateinit var bridge: PhoneBridge
     private val config = AlarmConfig()
@@ -35,12 +38,17 @@ class MonitorService : Service() {
 
     private fun startMonitoring() {
         scope.launch {
+            safeMeasureCycle()
             while (isActive) {
-                measureCycle()
-                delay(5 * 60_000L)
+                val now = System.currentTimeMillis()
+                val next = ((now / INTERVAL_MS) + 1L) * INTERVAL_MS
+                delay((next - now).coerceAtLeast(0L))
+                safeMeasureCycle()
             }
         }
     }
+
+    private suspend fun safeMeasureCycle() = measurementMutex.withLock { measureCycle() }
 
     private suspend fun measureCycle() {
         val wake = (getSystemService(POWER_SERVICE) as PowerManager)
@@ -50,9 +58,7 @@ class MonitorService : Service() {
             val hr = measureHeartRateWithRetry()
             if (hr != null) {
                 process(HealthReading(System.currentTimeMillis(), heartRate = hr))
-                if (hr > config.heartRateHighThreshold) {
-                    confirmHighHeartRate()
-                }
+                if (hr > config.heartRateHighThreshold) confirmHighHeartRate()
             } else {
                 process(HealthReading(System.currentTimeMillis(), valid = false))
             }
@@ -60,9 +66,7 @@ class MonitorService : Service() {
             val spo2 = measureSpO2WithRetry()
             if (spo2 != null) {
                 process(HealthReading(System.currentTimeMillis(), spo2 = spo2))
-                if (spo2 >= config.spo2CriticalImmediate && spo2 < config.spo2LowThreshold) {
-                    confirmLowSpO2()
-                }
+                if (spo2 >= config.spo2CriticalImmediate && spo2 < config.spo2LowThreshold) confirmLowSpO2()
             } else {
                 process(HealthReading(System.currentTimeMillis(), valid = false))
             }
@@ -134,7 +138,7 @@ class MonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_MEASURE_NOW) scope.launch { measureCycle() }
+        if (intent?.action == ACTION_MEASURE_NOW) scope.launch { safeMeasureCycle() }
         return START_STICKY
     }
 
@@ -148,5 +152,6 @@ class MonitorService : Service() {
 
     companion object {
         const val ACTION_MEASURE_NOW = "com.skhealth.guardian.wear.MEASURE_NOW"
+        private const val INTERVAL_MS = 5 * 60_000L
     }
 }
