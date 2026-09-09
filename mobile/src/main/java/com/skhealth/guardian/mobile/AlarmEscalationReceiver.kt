@@ -43,7 +43,7 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         contacts.filter { it.smsEnabled }.forEach { c ->
             if (exact && AlertAcknowledgementStore.isAcknowledged(context, alertId!!)) return@forEach
             if (!exact && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) return@forEach
-            val ok = SmsSender(context).send(c.phoneNumber, text, alertTs)
+            val ok = SmsSender(context).send(c.phoneNumber, text, alertTs, alertId.takeIf { exact })
             DeliveryLogStore.add(context, "SMS ESCALATION", mask(c.phoneNumber), ok, if (ok) "tekrar SMS kuyruğa alındı" else "tekrar SMS başlatılamadı")
         }
 
