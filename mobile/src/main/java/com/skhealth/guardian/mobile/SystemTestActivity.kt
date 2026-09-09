@@ -18,6 +18,7 @@ import java.util.Locale
 class SystemTestActivity : Activity() {
     private lateinit var output: TextView
     private lateinit var summary: TextView
+    private var preflightGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +50,7 @@ class SystemTestActivity : Activity() {
     override fun onResume() { super.onResume(); if (::output.isInitialized) runPreflight() }
 
     private fun runPreflight() {
+        val generation = ++preflightGeneration
         val contacts = ContactStore.contacts(this)
         val smsContact = contacts.any { it.smsEnabled }
         val callContact = contacts.any { it.callEnabled }
@@ -68,24 +70,33 @@ class SystemTestActivity : Activity() {
         required += "SMS gönderilecek kişi" to smsContact
         required += "Aranacak kişi" to callContact
 
-        val lines = mutableListOf<String>()
-        required.forEach { (label, ok) -> lines += status(label, ok) }
-        lines += info("Watch verisi", if (lastReading == 0L) "henüz yok" else formatAge(lastReading) + if (watchDataFresh) " • taze" else " • eski")
-        lines += info("Saat durumu", WatchStatusStore.status(this))
-        lines += if (!pc60Configured) "○ PC-60FW isteğe bağlı • henüz yapılandırılmamış" else status("PC-60FW geçerli veri akışı", pc60Fresh) + " • ${pc60.state}"
-        if (pc60Configured && pc60.lastPacketAt > 0) lines += info("PC-60FW son paket", formatAge(pc60.lastPacketAt))
-        lines += info("Aktif alarm kaynağı", SourcePriorityCoordinator.activeSourceLabel(this))
-        output.text = lines.joinToString("\n") + "\n• Galaxy Watch bağlantısı kontrol ediliyor…"
+        val baseLines = mutableListOf<String>()
+        required.forEach { (label, ok) -> baseLines += status(label, ok) }
+        baseLines += if (!pc60Configured) "○ PC-60FW isteğe bağlı • henüz yapılandırılmamış" else status("PC-60FW geçerli veri akışı", pc60Fresh) + " • ${pc60.state}"
+        if (pc60Configured && pc60.lastPacketAt > 0) baseLines += info("PC-60FW son paket", formatAge(pc60.lastPacketAt))
+        val source = SourcePriorityCoordinator.activeSourceLabel(this)
+        baseLines += info("Alarm kaynağı", if (source == "Aktif kaynak yok") "Yok" else source)
+        output.text = baseLines.joinToString("\n") + "\n• Galaxy Watch kontrol ediliyor…"
         val localOk = required.all { it.second }
 
         if (Build.VERSION.SDK_INT >= 31 && !has(Manifest.permission.BLUETOOTH_CONNECT)) {
+            if (generation != preflightGeneration) return
+            output.text = (baseLines + "✗ Galaxy Watch: Bluetooth bağlantı izni yok").joinToString("\n")
             showSummary(false, listOf("Bluetooth bağlantı izni eksik"), required.count { it.second }, required.size + 1)
             return
         }
 
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
+            if (generation != preflightGeneration) return@addOnSuccessListener
             val watchConnected = nodes.isNotEmpty()
-            output.append("\n${if (watchConnected) "✓" else "✗"} Galaxy Watch bağlantısı${if (watchConnected) " (${nodes.size})" else " yok"}")
+            val finalLines = baseLines.toMutableList()
+            finalLines += if (watchConnected) {
+                val dataText = if (lastReading == 0L) "henüz veri yok" else formatAge(lastReading) + if (watchDataFresh) " • taze" else " • eski"
+                "✓ Galaxy Watch bağlı (${nodes.size}) • $dataText"
+            } else {
+                "✗ Galaxy Watch bağlı değil"
+            }
+            output.text = finalLines.joinToString("\n")
             val missing = required.filterNot { it.second }.map { it.first }.toMutableList()
             if (!watchConnected) missing += "Galaxy Watch bağlantısı"
             if (pc60Configured && !pc60Fresh) missing += "PC-60FW geçerli/taze veri akışı"
@@ -94,7 +105,8 @@ class SystemTestActivity : Activity() {
             showSummary(localOk && watchConnected && (!pc60Configured || pc60Fresh), missing, passed, total)
             AlarmTimelineStore.add(this, "QA ÖN KONTROL", if (missing.isEmpty()) "Sistem hazır" else "Eksikler: ${missing.joinToString()}")
         }.addOnFailureListener {
-            output.append("\n✗ Saat bağlantısı okunamadı: ${it.javaClass.simpleName}")
+            if (generation != preflightGeneration) return@addOnFailureListener
+            output.text = (baseLines + "✗ Galaxy Watch bağlantısı okunamadı: ${it.javaClass.simpleName}").joinToString("\n")
             showSummary(false, listOf("Saat bağlantısı okunamadı"), required.count { it.second }, required.size + 1)
         }
     }
