@@ -6,10 +6,20 @@ import android.content.SharedPreferences
  * Small durable bounded set stored as newline-delimited IDs.
  * Writes are serialized and committed before returning because callers use this
  * for acknowledgement / delivery state that must survive an immediate process death.
+ *
+ * protectedIds are retained even when they fall outside the normal recent-entry window. This is
+ * used by exact alarm ACK storage so an acknowledgement referenced by a still-pending escalation
+ * cannot be pruned merely because many newer alarms were acknowledged.
  */
 object BoundedIdStore {
     @Synchronized
-    fun add(prefs: SharedPreferences, key: String, id: String, maxEntries: Int): Boolean {
+    fun add(
+        prefs: SharedPreferences,
+        key: String,
+        id: String,
+        maxEntries: Int,
+        protectedIds: Set<String> = emptySet()
+    ): Boolean {
         if (id.isBlank() || maxEntries <= 0) return false
         val ordered = prefs.getString(key, "")
             .orEmpty()
@@ -17,8 +27,15 @@ object BoundedIdStore {
             .filter { it.isNotBlank() && it != id }
             .toMutableList()
         ordered += id
+
+        val protected = ordered.filter { it in protectedIds }.distinct()
+        val recentUnprotected = ordered
+            .filter { it !in protectedIds }
+            .takeLast(maxEntries)
+        val retained = (protected + recentUnprotected).distinct()
+
         return prefs.edit()
-            .putString(key, ordered.takeLast(maxEntries).joinToString("\n"))
+            .putString(key, retained.joinToString("\n"))
             .commit()
     }
 
