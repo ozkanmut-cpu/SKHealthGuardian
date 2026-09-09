@@ -47,11 +47,23 @@ class WearReadingService : WearableListenerService() {
         if (HistoryStore.contains(this, reading.id)) return
         HistoryStore.add(this, reading)
         MonitoringState.markReading(this, receivedAt)
+        SpO2ReliabilityStore.onWatchReading(this, reading.id, reading.timestampMs, reading.spo2, reading.valid)
 
         val cfg = AppSettings.load(this)
         val maxLiveAgeMs = maxOf(cfg.staleDataMs, MIN_LIVE_REPLAY_AGE_MS)
         val ageMs = (receivedAt - reading.timestampMs).coerceAtLeast(0L)
         if (ageMs > maxLiveAgeMs) return
+
+        // PC-60FW geçerli ve taze veri üretiyorsa SpO2 alarmı için ana kaynak odur.
+        // Saat ölçümü yine geçmişe ve güvenilirlik karşılaştırmasına girer ancak alarm motorunu tetiklemez.
+        if (reading.spo2 != null && SourcePriorityCoordinator.isPc60Authoritative(this, receivedAt)) {
+            AlarmTimelineStore.add(
+                this,
+                "KAYNAK ÖNCELİĞİ",
+                "Watch SpO₂ %${reading.spo2} karşılaştırma için kaydedildi; alarm kararı PC-60FW'ye bırakıldı"
+            )
+            return
+        }
 
         val e = if (engine == null || activeConfig != cfg) {
             activeConfig = cfg
