@@ -3,6 +3,7 @@ package com.skhealth.guardian.mobile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.skhealth.guardian.shared.RemoteDeliveryGate
 
 class SmsRetryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -13,7 +14,7 @@ class SmsRetryReceiver : BroadcastReceiver() {
         val target = intent.getStringExtra(SmsStatusReceiver.EXTRA_TARGET) ?: "****"
         val alertTs = intent.getLongExtra(SmsStatusReceiver.EXTRA_ALERT_TS, 0L)
 
-        if (alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) {
+        if (!RemoteDeliveryGate.shouldDeliver(AlertAcknowledgementStore.lastAcknowledgedAt(context), alertTs)) {
             DeliveryLogStore.add(context, "SMS RETRY", target, false, "alarm susturuldu; yeniden gönderim iptal edildi")
             AlarmTimelineStore.add(context, "SMS RETRY İPTAL", "$target • alarm susturulduğu için yeniden gönderim yapılmadı", alertTs)
             return
