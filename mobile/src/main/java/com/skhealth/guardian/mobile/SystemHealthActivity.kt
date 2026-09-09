@@ -58,6 +58,17 @@ class SystemHealthActivity : Activity() {
         root.addView(TextView(this).apply { text = "Telefon pili: %$phoneBattery"; textSize = 18f })
         root.addView(TextView(this).apply { text = "Saat durumu/ACK: ${WatchStatusStore.status(this@SystemHealthActivity)}"; textSize = 17f })
 
+        root.addView(TextView(this).apply {
+            text = "Aktif alarm kaynağı: ${SourcePriorityCoordinator.activeSourceLabel(this@SystemHealthActivity, now)}"
+            textSize = 19f
+            setPadding(0, 24, 0, 8)
+        })
+        root.addView(TextView(this).apply {
+            text = "Saat ↔ PC-60FW SpO₂ doğrulaması\n${SpO2ReliabilityStore.formatted(this@SystemHealthActivity)}"
+            textSize = 17f
+            setPadding(0, 8, 0, 24)
+        })
+
         root.addView(Button(this).apply {
             text = "Uygulama ayarlarını aç"
             setOnClickListener { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
