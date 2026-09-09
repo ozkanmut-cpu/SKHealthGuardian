@@ -88,6 +88,16 @@ class MeasurementSettingsActivity : Activity() {
                 if (retry1Sec !in 5..300 || retry2Sec !in 5..600 || retry2Sec < retry1Sec) return@setOnClickListener toast("Teknik tekrar sürelerini kontrol et")
                 if (pcAlarmValue !in 50..99 || pcRecoveryValue !in 50..99 || pcConfirmMin !in 1..10 || pcStableSec !in 3..120) return@setOnClickListener toast("PC-60FW ayarlarını kontrol et")
 
+                AppSettings.setEscalationMinutes(this@MeasurementSettingsActivity, escalationMin)
+                AppSettings.setWatchMeasurementMinutes(this@MeasurementSettingsActivity, intervalMin)
+                AppSettings.setWatchConfirmMinutes(this@MeasurementSettingsActivity, confirmMin)
+                AppSettings.setWatchRetry1Seconds(this@MeasurementSettingsActivity, retry1Sec)
+                AppSettings.setWatchRetry2Seconds(this@MeasurementSettingsActivity, retry2Sec)
+                AppSettings.setPc60AlarmThreshold(this@MeasurementSettingsActivity, pcAlarmValue)
+                AppSettings.setPc60ConfirmMinutes(this@MeasurementSettingsActivity, pcConfirmMin)
+                AppSettings.setPc60RecoveryThreshold(this@MeasurementSettingsActivity, pcRecoveryValue)
+                AppSettings.setPc60StableSeconds(this@MeasurementSettingsActivity, pcStableSec)
+
                 AppSettings.save(this@MeasurementSettingsActivity, AlarmConfig(
                     spo2CriticalImmediate = critical,
                     spo2LowThreshold = low,
@@ -99,15 +109,6 @@ class MeasurementSettingsActivity : Activity() {
                     heartRateLowConfirmCount = lowHrCount,
                     staleDataMs = staleMin * 60_000L
                 ))
-                AppSettings.setEscalationMinutes(this@MeasurementSettingsActivity, escalationMin)
-                AppSettings.setWatchMeasurementMinutes(this@MeasurementSettingsActivity, intervalMin)
-                AppSettings.setWatchConfirmMinutes(this@MeasurementSettingsActivity, confirmMin)
-                AppSettings.setWatchRetry1Seconds(this@MeasurementSettingsActivity, retry1Sec)
-                AppSettings.setWatchRetry2Seconds(this@MeasurementSettingsActivity, retry2Sec)
-                AppSettings.setPc60AlarmThreshold(this@MeasurementSettingsActivity, pcAlarmValue)
-                AppSettings.setPc60ConfirmMinutes(this@MeasurementSettingsActivity, pcConfirmMin)
-                AppSettings.setPc60RecoveryThreshold(this@MeasurementSettingsActivity, pcRecoveryValue)
-                AppSettings.setPc60StableSeconds(this@MeasurementSettingsActivity, pcStableSec)
                 WatchStatusStore.mark(this@MeasurementSettingsActivity, "CONFIG_BEKLENİYOR | saat ACK bekleniyor")
                 toast("Tüm ölçüm ayarları kaydedildi")
             }
