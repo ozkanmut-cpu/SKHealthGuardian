@@ -10,6 +10,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.skhealth.guardian.shared.AlertIdentity
 
 class AlarmActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,6 +23,7 @@ class AlarmActivity : Activity() {
         val spo2 = intent.getIntExtra(EXTRA_SPO2, -1)
         val hr = intent.getIntExtra(EXTRA_HR, -1)
         val status = intent.getStringExtra(EXTRA_REMOTE_STATUS) ?: "Acil durum kişilerine bildirim durumu kontrol ediliyor"
+        val alertId = intent.getStringExtra(EXTRA_ALERT_ID)
         val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
         val source = SourcePriorityCoordinator.activeSourceLabel(this)
 
@@ -64,9 +66,14 @@ class AlarmActivity : Activity() {
         root.addView(action("🔕", "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
             getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
             WatchCommandSender(this@AlarmActivity).silenceAlarm()
-            val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
-            AlertAcknowledgementStore.acknowledge(this@AlarmActivity, acknowledgedTs)
-            EscalationScheduler.cancel(this@AlarmActivity, acknowledgedTs)
+            if (AlertIdentity.isValid(alertId)) {
+                AlertAcknowledgementStore.acknowledge(this@AlarmActivity, alertId!!)
+                EscalationScheduler.cancel(this@AlarmActivity, alertId, alertTs)
+            } else {
+                val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
+                AlertAcknowledgementStore.acknowledge(this@AlarmActivity, acknowledgedTs)
+                EscalationScheduler.cancel(this@AlarmActivity, acknowledgedTs)
+            }
             AlarmTimelineStore.add(this@AlarmActivity, "ALARM SUSTURULDU", reason)
             finish()
         }, UiStyle.sectionParams(this, 16))
@@ -112,6 +119,12 @@ class AlarmActivity : Activity() {
     private fun dp(value: Int) = UiStyle.dp(this, value)
 
     companion object {
-        const val EXTRA_REASON = "reason"; const val EXTRA_SPO2 = "spo2"; const val EXTRA_HR = "hr"; const val EXTRA_REMOTE_STATUS = "remote_status"; const val EXTRA_ALERT_TS = "alert_ts"; const val CRITICAL_NOTIFICATION_ID = 100
+        const val EXTRA_REASON = "reason"
+        const val EXTRA_SPO2 = "spo2"
+        const val EXTRA_HR = "hr"
+        const val EXTRA_REMOTE_STATUS = "remote_status"
+        const val EXTRA_ALERT_ID = "alert_id"
+        const val EXTRA_ALERT_TS = "alert_ts"
+        const val CRITICAL_NOTIFICATION_ID = 100
     }
 }
