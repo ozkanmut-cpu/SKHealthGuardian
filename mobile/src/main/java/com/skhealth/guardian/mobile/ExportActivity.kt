@@ -3,9 +3,11 @@ package com.skhealth.guardian.mobile
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.skhealth.guardian.shared.AlarmConfig
@@ -18,36 +20,29 @@ class ExportActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
-        }
-        root.addView(TextView(this).apply { text = "Yedekle / geri yükle"; textSize = 24f })
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 40) }
+        root.addView(TextView(this).apply { text = "Veri yönetimi"; textSize = 27f; setTypeface(typeface, Typeface.BOLD) })
         root.addView(TextView(this).apply {
-            text = "Ölçüm CSV'si ölçüm geçmişini, doğrulama CSV'si Watch↔PC-60FW eşleşmelerini dışa aktarır. Tam JSON; tüm alarm/ölçüm ayarlarını, kişileri, ölçümleri, alarm timeline'ını, SMS/arama kayıtlarını ve saat doğrulama geçmişini içerir. Telefon numaraları JSON içinde açık metindir; güvenli yerde sakla."
-            setPadding(0, 16, 0, 16)
+            text = "Ölçümlerini dışa aktarabilir veya tam uygulama yedeği oluşturabilirsin. JSON yedeği kişiler ve telefon numaralarını açık metin içerir; güvenli yerde sakla."
+            textSize = 15f; setPadding(0, 10, 0, 20)
         })
-        root.addView(Button(this).apply {
-            text = "Ölçüm geçmişini CSV dışa aktar"
-            setOnClickListener { createDocument("text/csv", "SKHealthGuardian_measurements.csv", "csv") }
-        })
-        root.addView(Button(this).apply {
-            text = "Saat doğrulama verisini CSV dışa aktar"
-            setOnClickListener { createDocument("text/csv", "SKHealthGuardian_watch_pc60_reliability.csv", "reliability_csv") }
-        })
-        root.addView(Button(this).apply {
-            text = "Tam JSON yedeği oluştur"
-            setOnClickListener { createDocument("application/json", "SKHealthGuardian_backup.json", "json") }
-        })
-        root.addView(Button(this).apply {
-            text = "JSON yedeğinden geri yükle"
-            setOnClickListener { chooseBackup() }
-        })
+
+        root.addView(TextView(this).apply { text = "Dışa aktar"; textSize = 20f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 6, 0, 8) })
+        root.addView(Button(this).apply { text = "Ölçüm geçmişi (CSV)"; setOnClickListener { createDocument("text/csv", "SKHealthGuardian_measurements.csv", "csv") } })
+        root.addView(Button(this).apply { text = "Watch ↔ PC-60FW doğrulama (CSV)"; setOnClickListener { createDocument("text/csv", "SKHealthGuardian_watch_pc60_reliability.csv", "reliability_csv") } })
+        root.addView(Button(this).apply { text = "Tam uygulama yedeği (JSON)"; setOnClickListener { createDocument("application/json", "SKHealthGuardian_backup.json", "json") } })
+
+        root.addView(TextView(this).apply { text = "Geri yükle"; textSize = 20f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 24, 0, 8) })
         root.addView(TextView(this).apply {
-            text = "Geri yükleme önce dosyayı doğrular, sonra onay ister. Onaydan sonra mevcut ayarlar, kişiler ve yedekte bulunan geçmiş veriler yedek içeriğiyle değiştirilir. Eski schema v1/v2 yedekleri de desteklenir; bu dosyalarda yapısal olmayan eski log alanları mevcut logları silmez."
-            setPadding(0, 16, 0, 0)
+            text = "Dikkat: geri yükleme, yedekte bulunan ayarlar, kişiler ve geçmiş verilerle mevcut verileri değiştirir. Dosya önce doğrulanır ve işlem başlamadan tekrar onay istenir."
+            textSize = 15f; setPadding(0, 0, 0, 10)
         })
-        setContentView(root)
+        root.addView(Button(this).apply { text = "JSON YEDEĞİNDEN GERİ YÜKLE"; setOnClickListener { chooseBackup() } })
+        root.addView(TextView(this).apply {
+            text = "Desteklenen formatlar: schema v3 (güncel), v2 ve v1. Eski yedeklerde bulunmayan yapılandırılmış log alanları mevcut logları silmez."
+            textSize = 14f; setPadding(0, 16, 0, 0)
+        })
+        setContentView(ScrollView(this).apply { addView(root) })
     }
 
     private fun createDocument(type: String, name: String, kind: String) {
