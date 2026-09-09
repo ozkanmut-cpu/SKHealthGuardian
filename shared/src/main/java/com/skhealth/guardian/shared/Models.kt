@@ -37,5 +37,6 @@ data class AlertEvent(
     val type: AlertType,
     val timestampMs: Long,
     val reading: HealthReading? = null,
-    val message: String
+    val message: String,
+    val eventId: String = UUID.randomUUID().toString()
 )
