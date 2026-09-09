@@ -19,8 +19,10 @@ class SmsSender(private val context: Context) {
             val parts = sms.divideMessage(message)
             val masked = mask(number)
             val sentIntents = ArrayList<PendingIntent>(parts.size)
+            val deliveredIntents = ArrayList<PendingIntent>(parts.size)
             parts.indices.forEach { index ->
-                val intent = Intent(context, SmsStatusReceiver::class.java).apply {
+                val commonRequestCode = messageId.hashCode() * 31 + attempt * 1000 + index
+                val sentIntent = Intent(context, SmsStatusReceiver::class.java).apply {
                     action = SmsStatusReceiver.ACTION_SMS_SENT
                     putExtra(SmsStatusReceiver.EXTRA_TARGET, masked)
                     putExtra(SmsStatusReceiver.EXTRA_NUMBER, number)
@@ -32,12 +34,27 @@ class SmsSender(private val context: Context) {
                 }
                 sentIntents += PendingIntent.getBroadcast(
                     context,
-                    (messageId.hashCode() * 31 + attempt * 1000 + index),
-                    intent,
+                    commonRequestCode,
+                    sentIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val deliveredIntent = Intent(context, SmsStatusReceiver::class.java).apply {
+                    action = SmsStatusReceiver.ACTION_SMS_DELIVERED
+                    putExtra(SmsStatusReceiver.EXTRA_TARGET, masked)
+                    putExtra(SmsStatusReceiver.EXTRA_MESSAGE_ID, messageId)
+                    putExtra(SmsStatusReceiver.EXTRA_ATTEMPT, attempt)
+                    putExtra(SmsStatusReceiver.EXTRA_PART, index + 1)
+                    putExtra(SmsStatusReceiver.EXTRA_TOTAL, parts.size)
+                }
+                deliveredIntents += PendingIntent.getBroadcast(
+                    context,
+                    commonRequestCode xor 0x5A5A5A5A,
+                    deliveredIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
             }
-            sms.sendMultipartTextMessage(number, null, parts, sentIntents, null)
+            sms.sendMultipartTextMessage(number, null, parts, sentIntents, deliveredIntents)
             true
         }.getOrDefault(false)
     }
