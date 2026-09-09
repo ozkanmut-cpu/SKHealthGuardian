@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -44,9 +45,18 @@ class SystemHealthActivity : Activity() {
         addStatus("Tam ekran alarm yetkisi", canUseFullScreenIntent())
         addStatus("Pil optimizasyonu dışında", isIgnoringBatteryOptimization())
 
-        val last = MonitoringState.lastReading(this)
-        addStatus("Saatten veri geliyor", last > 0 && System.currentTimeMillis() - last <= AppSettings.load(this).staleDataMs)
-        root.addView(TextView(this).apply { text = "Saat self-test: ${WatchStatusStore.status(this@SystemHealthActivity)}" })
+        val now = System.currentTimeMillis()
+        val stale = AppSettings.load(this).staleDataMs
+        val lastReading = MonitoringState.lastReading(this)
+        val heartbeat = WatchHeartbeatStore.timestamp(this)
+        val watchBattery = WatchHeartbeatStore.battery(this)
+        val phoneBattery = getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+
+        addStatus("Saatten ölçüm verisi geliyor", lastReading > 0 && now - lastReading <= stale)
+        addStatus("Saat servisi heartbeat aktif", heartbeat > 0 && now - heartbeat <= 3 * 60_000L)
+        root.addView(TextView(this).apply { text = "Saat pili: ${if (watchBattery >= 0) "%$watchBattery" else "bilinmiyor"}"; textSize = 18f })
+        root.addView(TextView(this).apply { text = "Telefon pili: %$phoneBattery"; textSize = 18f })
+        root.addView(TextView(this).apply { text = "Saat durumu/ACK: ${WatchStatusStore.status(this@SystemHealthActivity)}"; textSize = 17f })
 
         root.addView(Button(this).apply {
             text = "Uygulama ayarlarını aç"

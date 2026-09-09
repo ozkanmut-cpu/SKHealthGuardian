@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.os.BatteryManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
@@ -13,6 +14,7 @@ import kotlinx.coroutines.*
 class WatchdogService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var alertedForTs = -1L
+
     override fun onCreate() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
@@ -30,10 +32,14 @@ class WatchdogService : Service() {
                         HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
                     )
                 }
+                val phoneBattery = getSystemService(BatteryManager::class.java)
+                    .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                BatteryAlertHelper.update(this@WatchdogService, "phone", "Telefon", phoneBattery)
                 delay(60_000L)
             }
         }
     }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() { scope.cancel(); super.onDestroy() }

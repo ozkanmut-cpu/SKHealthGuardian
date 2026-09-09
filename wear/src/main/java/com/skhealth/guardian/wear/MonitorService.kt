@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.os.BatteryManager
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
@@ -41,9 +42,23 @@ class MonitorService : Service() {
             .setContentTitle("Sağlık izleme aktif")
             .setContentText("SpO₂ ve nabız 5 dakikada bir ölçülüyor")
             .setOngoing(true).build())
+        startHeartbeat()
         startMonitoring()
         startSensorWatchdog()
     }
+
+    private fun startHeartbeat() {
+        scope.launch {
+            while (isActive) {
+                runCatching { bridge.sendHeartbeat(batteryPct()) }
+                delay(60_000L)
+            }
+        }
+    }
+
+    private fun batteryPct(): Int = getSystemService(BatteryManager::class.java)
+        .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        .coerceIn(0, 100)
 
     private fun startMonitoring() {
         scope.launch {
@@ -123,37 +138,28 @@ class MonitorService : Service() {
 
     private suspend fun confirmTriggeredReadings(triggerAt: Long, confirmHr: Boolean, confirmSpo2: Boolean) {
         delayUntil(triggerAt + CONFIRM_DELAY_MS)
-
         var retryHr = false
         var retrySpo2 = false
 
         if (confirmHr) {
             val secondHr = runCatching { sensor.measureHeartRate() }.getOrNull()
-            if (secondHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = secondHr))
-            else retryHr = true
+            if (secondHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = secondHr)) else retryHr = true
         }
-
         if (confirmSpo2) {
             val secondSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
-            if (secondSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = secondSpo2))
-            else retrySpo2 = true
+            if (secondSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = secondSpo2)) else retrySpo2 = true
         }
-
         if (!retryHr && !retrySpo2) return
 
         runCatching { sensor.reconnect() }
         delayUntil(triggerAt + FINAL_RETRY_AT_MS)
-
         if (retryHr) {
             val finalHr = runCatching { sensor.measureHeartRate() }.getOrNull()
-            if (finalHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = finalHr))
-            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+            if (finalHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = finalHr)) else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
         }
-
         if (retrySpo2) {
             val finalSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
-            if (finalSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = finalSpo2))
-            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+            if (finalSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = finalSpo2)) else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
         }
     }
 
@@ -185,9 +191,7 @@ class MonitorService : Service() {
     }
 
     private suspend fun process(reading: HealthReading) {
-        if (reading.valid && (reading.spo2 != null || reading.heartRate != null)) {
-            lastValidReadingAt = reading.timestampMs
-        }
+        if (reading.valid && (reading.spo2 != null || reading.heartRate != null)) lastValidReadingAt = reading.timestampMs
         runCatching { bridge.send(reading) }
         val alerts = engine.evaluate(reading)
         if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())

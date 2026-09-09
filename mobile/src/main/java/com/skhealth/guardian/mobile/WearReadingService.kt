@@ -14,6 +14,13 @@ class WearReadingService : WearableListenerService() {
             WatchStatusStore.mark(this, String(event.data))
             return
         }
+        if (event.path == "/health/heartbeat") {
+            val p = String(event.data).split('|')
+            val battery = p.getOrNull(1)?.toIntOrNull() ?: -1
+            WatchHeartbeatStore.mark(this, battery)
+            BatteryAlertHelper.update(this, "watch", "Saat", battery)
+            return
+        }
         if (event.path != "/health/reading") return
 
         val receivedAt = System.currentTimeMillis()
@@ -39,9 +46,6 @@ class WearReadingService : WearableListenerService() {
 
         if (HistoryStore.contains(this, reading.id)) return
         HistoryStore.add(this, reading)
-
-        // Phone watchdog tracks link freshness, not the measurement's historical timestamp.
-        // A reconnect may replay queued readings that are minutes or hours old.
         MonitoringState.markReading(this, receivedAt)
 
         val cfg = AppSettings.load(this)

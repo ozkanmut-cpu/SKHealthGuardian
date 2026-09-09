@@ -27,6 +27,14 @@ class PhoneBridge(private val context: Context) {
         if (!ok) enqueue(payload)
     }
 
+    suspend fun sendHeartbeat(batteryPct: Int) {
+        val payload = "${System.currentTimeMillis()}|$batteryPct".toByteArray()
+        val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
+        nodes.forEach { node ->
+            runCatching { Wearable.getMessageClient(context).sendMessage(node.id, "/health/heartbeat", payload).awaitCompat() }
+        }
+    }
+
     private suspend fun flushQueued(nodeIds: List<String>) {
         val queued = loadQueue().toMutableList()
         if (queued.isEmpty()) return
