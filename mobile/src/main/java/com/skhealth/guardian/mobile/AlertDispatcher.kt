@@ -53,22 +53,34 @@ class AlertDispatcher(private val context: Context) {
             putExtra(AlarmActivity.EXTRA_HR, current?.heartRate ?: -1)
             putExtra(AlarmActivity.EXTRA_REMOTE_STATUS, remoteStatus)
         }
-        context.startActivity(alarmIntent)
+
+        // Post the full-screen notification first. Modern Android may block a direct
+        // background activity launch; the notification must still exist in that case.
         localNotification(alert, alarmIntent)
+        runCatching { context.startActivity(alarmIntent) }
     }
 
     private fun localNotification(alert: AlertEvent, alarmIntent: Intent) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
-        val pi = PendingIntent.getActivity(context, alert.timestampMs.toInt(), alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        nm.notify(100, NotificationCompat.Builder(context, "critical")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("KRİTİK SAĞLIK UYARISI")
-            .setContentText(alert.message)
-            .setContentIntent(pi)
-            .setFullScreenIntent(pi, true)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setOngoing(true).build())
+        val pi = PendingIntent.getActivity(
+            context,
+            alert.timestampMs.toInt(),
+            alarmIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        nm.notify(
+            AlarmActivity.CRITICAL_NOTIFICATION_ID,
+            NotificationCompat.Builder(context, "critical")
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("KRİTİK SAĞLIK UYARISI")
+                .setContentText(alert.message)
+                .setContentIntent(pi)
+                .setFullScreenIntent(pi, true)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setOngoing(true)
+                .build()
+        )
     }
 
     private fun mask(number: String): String {
