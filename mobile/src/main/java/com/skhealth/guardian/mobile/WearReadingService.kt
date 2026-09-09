@@ -47,7 +47,7 @@ class WearReadingService : WearableListenerService() {
         if (HistoryStore.contains(this, reading.id)) return
         HistoryStore.add(this, reading)
         MonitoringState.markReading(this, receivedAt)
-        SpO2ReliabilityStore.onWatchReading(this, reading.id, reading.timestampMs, reading.spo2, reading.valid)
+        SpO2ReliabilityStore.onWatchReading(this, reading.id, reading.timestampMs, reading.spo2, reading.valid, reading.heartRate)
 
         val cfg = AppSettings.load(this)
         val maxLiveAgeMs = maxOf(cfg.staleDataMs, MIN_LIVE_REPLAY_AGE_MS)
