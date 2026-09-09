@@ -35,6 +35,30 @@ object WearSettings {
             .apply()
     }
 
+    fun saveTiming(context: Context, payload: ByteArray) {
+        val p = String(payload).split('|')
+        if (p.size < 13) return
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putInt("measurement_minutes", p[9].toIntOrNull()?.coerceIn(1, 60) ?: 5)
+            .putInt("confirm_minutes", p[10].toIntOrNull()?.coerceIn(1, 10) ?: 2)
+            .putInt("retry1_seconds", p[11].toIntOrNull()?.coerceIn(5, 300) ?: 30)
+            .putInt("retry2_seconds", p[12].toIntOrNull()?.coerceIn(5, 600) ?: 60)
+            .apply()
+    }
+
+    fun measurementIntervalMs(context: Context): Long =
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("measurement_minutes", 5) * 60_000L
+
+    fun confirmDelayMs(context: Context): Long =
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("confirm_minutes", 2) * 60_000L
+
+    fun retryWaitsMs(context: Context): List<Long> {
+        val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val r1 = p.getInt("retry1_seconds", 30).toLong() * 1_000L
+        val r2 = p.getInt("retry2_seconds", 60).toLong() * 1_000L
+        return listOf(0L, r1, r2)
+    }
+
     fun decode(payload: ByteArray): AlarmConfig? {
         val p = String(payload).split('|')
         if (p.size < 9) return null
