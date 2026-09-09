@@ -1,6 +1,7 @@
 package com.skhealth.guardian.wear
 
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
@@ -15,7 +16,10 @@ class WearCommandService : WearableListenerService() {
     override fun onMessageReceived(event: MessageEvent) {
         when (event.path) {
             "/health/selftest" -> runSelfTest()
-            "/health/measure_now" -> startService(Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW))
+            "/health/measure_now" -> ContextCompat.startForegroundService(
+                this,
+                Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW)
+            )
             "/health/config" -> WearSettings.decode(event.data)?.let { WearSettings.save(this, it) }
         }
     }
@@ -29,10 +33,15 @@ class WearCommandService : WearableListenerService() {
                 if (hr != null) "OK | sensör hazır | nabız=$hr" else "UYARI | sensör yanıt vermedi"
             }.getOrElse { "HATA | ${it.javaClass.simpleName}" }
             val nodes = Wearable.getNodeClient(this@WearCommandService).connectedNodes.awaitCompat2()
-            nodes.forEach { Wearable.getMessageClient(this@WearCommandService).sendMessage(it.id, "/health/status", status.toByteArray()).awaitCompat2() }
+            nodes.forEach {
+                Wearable.getMessageClient(this@WearCommandService)
+                    .sendMessage(it.id, "/health/status", status.toByteArray())
+                    .awaitCompat2()
+            }
         }
     }
 }
+
 private suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitCompat2(): T =
     kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         addOnSuccessListener { if (cont.isActive) cont.resume(it) {} }
