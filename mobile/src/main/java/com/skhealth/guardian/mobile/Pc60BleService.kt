@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.skhealth.guardian.shared.Pc60Sample
 import java.util.UUID
 
 class Pc60BleService : Service() {
@@ -24,12 +25,17 @@ class Pc60BleService : Service() {
     private var packetCount = 0L
     private var currentName = ""
     private var currentAddress = ""
+    private lateinit var sdkRuntime: Pc60SdkRuntime
+    private lateinit var alarmController: Pc60AlarmController
 
     private val adapter: BluetoothAdapter?
         get() = getSystemService(BluetoothManager::class.java).adapter
 
     override fun onCreate() {
         super.onCreate()
+        alarmController = Pc60AlarmController(this)
+        sdkRuntime = Pc60SdkRuntimeFactory.create()
+
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "PC-60FW bağlantısı", NotificationManager.IMPORTANCE_LOW))
         startForeground(
@@ -41,20 +47,64 @@ class Pc60BleService : Service() {
                 .setOngoing(true)
                 .build()
         )
-        connectOrScan()
+
+        if (sdkRuntime.available) startSdkRuntime() else connectOrScan()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_RESCAN -> {
                 Pc60StatusStore.clearRemembered(this)
-                disconnectGatt()
-                startScan()
+                if (sdkRuntime.available) {
+                    sdkRuntime.restart()
+                } else {
+                    disconnectGatt()
+                    startScan()
+                }
             }
             ACTION_STOP -> stopSelf()
-            else -> connectOrScan()
+            else -> if (!sdkRuntime.available) connectOrScan()
         }
         return START_STICKY
+    }
+
+    private fun startSdkRuntime() {
+        if (!permissionsReady()) {
+            updateState("Bluetooth izni bekleniyor")
+            return
+        }
+        val bt = adapter
+        if (bt == null || !bt.isEnabled) {
+            updateState("Bluetooth kapalı")
+            return
+        }
+        updateState("Lepu SDK ile PC-60FW hazırlanıyor")
+        sdkRuntime.start(
+            context = this,
+            onState = { state -> handler.post { updateState(state) } },
+            onSample = { sample -> handler.post { onSdkSample(sample) } }
+        )
+    }
+
+    private fun onSdkSample(sample: Pc60Sample) {
+        packetCount += 1
+        val old = Pc60StatusStore.load(this)
+        Pc60StatusStore.save(
+            this,
+            old.copy(
+                state = if (sample.valid) "Bağlı; Lepu RtParam geliyor" else "Bağlı; ölçüm stabilizasyonu bekleniyor",
+                deviceName = old.deviceName.ifBlank { "PC-60FW" },
+                lastPacketAt = sample.timestampMs,
+                packetCount = packetCount,
+                spo2 = sample.spo2,
+                heartRate = sample.pulseRate,
+                perfusionIndex = sample.perfusionIndex,
+                batteryLevel = sample.batteryLevel,
+                probeOff = sample.probeOff,
+                pulseSearching = sample.pulseSearching
+            )
+        )
+        alarmController.onSample(sample)
     }
 
     private fun connectOrScan() {
@@ -82,7 +132,7 @@ class Pc60BleService : Service() {
         val scanner = adapter?.bluetoothLeScanner ?: return
         if (scanning) return
         scanning = true
-        updateState("PC-60FW aranıyor")
+        updateState("PC-60FW aranıyor (ham BLE teşhis modu)")
         runCatching { scanner.startScan(scanCallback) }
             .onFailure { scanning = false; updateState("Tarama başlatılamadı: ${it.javaClass.simpleName}") }
         handler.postDelayed({
@@ -122,7 +172,7 @@ class Pc60BleService : Service() {
         disconnectGatt()
         currentName = name
         currentAddress = device.address
-        updateState("Bağlanıyor")
+        updateState("Bağlanıyor (ham BLE teşhis modu)")
         gatt = if (Build.VERSION.SDK_INT >= 23) {
             device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
@@ -172,7 +222,7 @@ class Pc60BleService : Service() {
                 @Suppress("DEPRECATION")
                 gatt.writeDescriptor(ccc)
             }
-            updateState("Bağlı; veri bekleniyor")
+            updateState("Bağlı; ham BLE verisi bekleniyor")
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
@@ -188,10 +238,11 @@ class Pc60BleService : Service() {
 
     private fun onPacket(bytes: ByteArray) {
         packetCount += 1
+        val old = Pc60StatusStore.load(this)
         Pc60StatusStore.save(
             this,
-            Pc60Status(
-                state = "Bağlı; veri geliyor",
+            old.copy(
+                state = "Bağlı; ham BLE verisi geliyor",
                 deviceName = currentName,
                 address = currentAddress,
                 lastPacketAt = System.currentTimeMillis(),
@@ -233,6 +284,7 @@ class Pc60BleService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        if (::sdkRuntime.isInitialized) sdkRuntime.stop()
         disconnectGatt()
         updateState("Kapalı")
         super.onDestroy()
