@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.SmsRetryPolicy
 
 class SmsStatusReceiver : BroadcastReceiver() {
@@ -16,6 +17,8 @@ class SmsStatusReceiver : BroadcastReceiver() {
         val part = intent.getIntExtra(EXTRA_PART, 1)
         val total = intent.getIntExtra(EXTRA_TOTAL, 1)
         val alertTs = intent.getLongExtra(EXTRA_ALERT_TS, 0L)
+        val alertId = intent.getStringExtra(EXTRA_ALERT_ID)
+        val exact = AlertIdentity.isValid(alertId)
         val ok = resultCode == Activity.RESULT_OK
 
         if (intent.action == ACTION_SMS_DELIVERED) {
@@ -40,7 +43,12 @@ class SmsStatusReceiver : BroadcastReceiver() {
         DeliveryLogStore.add(context, "SMS", target, ok, detail)
         AlarmTimelineStore.add(context, "SMS SONUCU", "$target • $detail")
 
-        if (alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) {
+        val acknowledged = if (exact) {
+            AlertAcknowledgementStore.isAcknowledged(context, alertId!!)
+        } else {
+            alertTs > 0L && AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs
+        }
+        if (acknowledged) {
             AlarmTimelineStore.add(context, "SMS RETRY İPTAL", "$target • alarm susturulduğu için retry planlanmadı", alertTs)
             return
         }
@@ -51,13 +59,14 @@ class SmsStatusReceiver : BroadcastReceiver() {
         ) {
             val retryIntent = Intent(context, SmsRetryReceiver::class.java).apply {
                 action = "com.skhealth.guardian.mobile.SMS_RETRY"
-                data = Uri.parse("skhealth://sms-retry/$messageId/$attempt")
+                data = Uri.parse("skhealth://sms-retry/${Uri.encode(messageId)}/$attempt")
                 putExtra(EXTRA_NUMBER, number)
                 putExtra(EXTRA_MESSAGE, message)
                 putExtra(EXTRA_MESSAGE_ID, messageId)
                 putExtra(EXTRA_ATTEMPT, attempt + 1)
                 putExtra(EXTRA_TARGET, target)
                 putExtra(EXTRA_ALERT_TS, alertTs)
+                if (exact) putExtra(EXTRA_ALERT_ID, alertId)
             }
             val pi = PendingIntent.getBroadcast(
                 context,
@@ -81,6 +90,7 @@ class SmsStatusReceiver : BroadcastReceiver() {
         const val EXTRA_ATTEMPT = "attempt"
         const val EXTRA_PART = "part"
         const val EXTRA_TOTAL = "total"
+        const val EXTRA_ALERT_ID = "alert_id"
         const val EXTRA_ALERT_TS = "alert_ts"
     }
 }
