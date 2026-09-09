@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.content.Context
+import com.skhealth.guardian.shared.SpO2ReliabilityClassifier
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -72,14 +73,6 @@ object SpO2ReliabilityStore {
         val count = p.getInt("count", 0)
         val mae = if (count > 0) p.getInt("sum_abs", 0).toDouble() / count else null
         val bias = if (count > 0) p.getInt("sum_signed", 0).toDouble() / count else null
-        val label = when {
-            count < 5 -> "Yetersiz eşleşme"
-            mae != null && mae <= 2.0 -> "Yüksek uyum"
-            mae != null && mae <= 4.0 -> "Orta uyum"
-            bias != null && bias >= 5.0 -> "Saat sistematik yüksek okuyor"
-            bias != null && bias <= -5.0 -> "Saat sistematik düşük okuyor"
-            else -> "Düşük uyum"
-        }
         return Summary(
             count = count,
             meanAbsoluteError = mae,
@@ -87,7 +80,7 @@ object SpO2ReliabilityStore {
             lastWatch = p.getInt("last_watch", -1).takeIf { it >= 0 },
             lastPc60 = p.getInt("last_pc", -1).takeIf { it >= 0 },
             lastDiff = p.getInt("last_diff", Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE },
-            label = label
+            label = SpO2ReliabilityClassifier.label(count, mae, bias)
         )
     }
 
