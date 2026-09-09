@@ -69,7 +69,6 @@ class WearAlarmActivity : Activity() {
         }, sectionParams(6))
 
         root.addView(action("⌂","Ana ekrana dön",muted) {
-            LocalAlarm.cancel(this)
             startActivity(Intent(this, WatchSetupActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             finish()
         }, sectionParams(6))
