@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build mobile and wear APKs
+    name: Test and build mobile and wear APKs
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -36,6 +36,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+
+      - name: Run shared alarm tests
+        run: gradle --no-daemon --stacktrace :shared:testDebugUnitTest
 
       - name: Build debug APKs
         run: gradle --no-daemon --stacktrace :mobile:assembleDebug :wear:assembleDebug
