@@ -36,7 +36,22 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
             return
         }
 
+        val now = System.currentTimeMillis()
+        if (!EscalationDeliveryState.tryAcquireLease(context, deliveryIdentity, now)) {
+            AlarmTimelineStore.add(context, "ESCALATION PARALEL ENGELLENDİ", "Aynı escalation için başka bir gönderim işlemi zaten çalışıyor")
+            return
+        }
+
         val reason = intent.getStringExtra(EXTRA_REASON) ?: "Sağlık alarmı"
+        // Rearm before external side effects. If this process dies during SMS/call delivery, the
+        // lease deadline becomes a recovery attempt. Successful completion cancels this alarm.
+        val recoveryAt = now + EscalationDeliveryState.DEFAULT_LEASE_MS
+        if (exact) {
+            EscalationScheduler.schedule(context, alertId!!, alertTs, reason, recoveryAt)
+        } else if (alertTs > 0L) {
+            EscalationScheduler.schedule(context, alertTs, reason, recoveryAt)
+        }
+
         val contacts = ContactStore.contacts(context)
         val text = "SK HEALTH GUARDIAN TEKRAR UYARI\n$reason\nAlarm henüz susturulmadı/onaylanmadı."
 
@@ -62,8 +77,6 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
             if (callOk) break
         }
 
-        // Completion is persisted only after remote delivery attempts finish. If the process dies
-        // earlier, a later retry is safer than permanently losing the escalation.
         EscalationDeliveryState.markDelivered(context, deliveryIdentity)
         if (exact) EscalationScheduler.markConsumed(context, alertId!!, alertTs)
         else EscalationScheduler.markConsumed(context, alertTs)
