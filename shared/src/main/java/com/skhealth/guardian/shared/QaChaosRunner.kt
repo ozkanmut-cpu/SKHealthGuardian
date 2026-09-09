@@ -46,14 +46,12 @@ object QaChaosRunner {
         repeat(operations.coerceAtLeast(1)) { index ->
             when (random.nextInt(10)) {
                 0, 1 -> {
-                    // Reading delivery: sometimes replay an existing id.
                     val replay = seenReadingIds.isNotEmpty() && random.nextInt(5) == 0
                     val id = if (replay) "r-${random.nextInt(maxOf(1, acceptedReadings))}" else "r-$acceptedReadings"
                     if (seenReadingIds.add(id)) acceptedReadings++ else duplicateRejected++
                 }
 
                 2 -> {
-                    // Sensor packets deliberately arrive out of order around reconnects.
                     val candidate = if (random.nextBoolean()) {
                         latestSensorTs + random.nextLong(0L, 5L)
                     } else {
@@ -67,7 +65,6 @@ object QaChaosRunner {
                 }
 
                 3 -> {
-                    // New alarm.
                     nextAlertTs += random.nextLong(1L, 10L)
                     latestAlertTs = nextAlertTs
                     if (!RemoteDeliveryGate.shouldDeliver(ackWatermark, latestAlertTs)) {
@@ -76,7 +73,6 @@ object QaChaosRunner {
                 }
 
                 4 -> {
-                    // ACK may be delayed/replayed. Production store is monotonic, so model uses max.
                     val candidate = when {
                         latestAlertTs == 0L -> random.nextLong(0L, nextAlertTs + 1L)
                         random.nextBoolean() -> latestAlertTs
@@ -86,7 +82,6 @@ object QaChaosRunner {
                 }
 
                 5, 6 -> {
-                    // SMS retry / escalation / call-failover step for a current or stale alarm.
                     val targetAlert = when {
                         latestAlertTs == 0L -> 0L
                         random.nextInt(4) == 0 -> (latestAlertTs - random.nextLong(0L, 50L)).coerceAtLeast(1L)
@@ -108,13 +103,12 @@ object QaChaosRunner {
                 }
 
                 7 -> {
-                    // PC-60 freshness / validity flap.
                     val now = latestSensorTs + random.nextLong(0L, 20_000L)
                     val lastPacket = latestSensorTs
                     val probeOff = random.nextInt(10) == 0
                     val searching = random.nextInt(10) == 0
                     val pi = if (random.nextInt(12) == 0) 0.0 else 1.2
-                    val spo2 = if (random.nextInt(15) == 0) null else 96
+                    val spo2: Int? = if (random.nextInt(15) == 0) null else 96
                     val current = SourcePriorityPolicy.isPc60Spo2Authoritative(
                         nowMs = now,
                         lastPacketAt = lastPacket,
@@ -126,24 +120,22 @@ object QaChaosRunner {
                     if (lastPc60Authority != null && lastPc60Authority != current) sourceFlaps++
                     lastPc60Authority = current
                     val age = now - lastPacket
-                    if (current && (age !in 0..SourcePriorityPolicy.DEFAULT_PC60_FRESH_MS || probeOff || searching || pi <= 0.0 || spo2 !in 1..100)) {
+                    val invalidSpo2 = spo2 == null || spo2 !in 1..100
+                    if (current && (age !in 0..SourcePriorityPolicy.DEFAULT_PC60_FRESH_MS || probeOff || searching || pi <= 0.0 || invalidSpo2)) {
                         violations += "invalid PC60 authority at op=$index"
                     }
                 }
 
                 8 -> {
-                    // Process/service death: ephemeral state disappears, persisted watermarks must not.
                     processRestarts++
                     val beforeAck = ackWatermark
                     val beforeSensor = sensorGate.lastAccepted()
-                    // The model intentionally keeps persisted state and resets no durable watermark.
                     if (ackWatermark != beforeAck || sensorGate.lastAccepted() != beforeSensor) {
                         violations += "durable state changed across restart at op=$index"
                     }
                 }
 
                 else -> {
-                    // Explicit invariant sweep.
                     if (latestAlertTs > 0L && ackWatermark >= latestAlertTs) {
                         if (RemoteDeliveryGate.shouldDeliver(ackWatermark, latestAlertTs)) {
                             violations += "ACKed latest alert became deliverable at op=$index"
@@ -154,8 +146,6 @@ object QaChaosRunner {
                     }
                 }
             }
-
-            if (violations.size >= 50) return@repeat
         }
 
         return QaChaosReport(
