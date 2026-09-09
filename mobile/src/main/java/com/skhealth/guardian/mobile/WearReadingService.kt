@@ -15,18 +15,20 @@ class WearReadingService : WearableListenerService() {
             return
         }
         if (event.path != "/health/reading") return
+
+        val receivedAt = System.currentTimeMillis()
         val p = String(event.data).split('|')
         val reading = when {
             p.size >= 6 -> HealthReading(
                 id = p[0],
-                timestampMs = p[1].toLongOrNull() ?: System.currentTimeMillis(),
+                timestampMs = p[1].toLongOrNull() ?: receivedAt,
                 spo2 = p[2].toIntOrNull(),
                 heartRate = p[3].toIntOrNull(),
                 valid = p[4].toBooleanStrictOrNull() ?: false,
                 source = p[5]
             )
             p.size >= 5 -> HealthReading(
-                timestampMs = p[0].toLongOrNull() ?: System.currentTimeMillis(),
+                timestampMs = p[0].toLongOrNull() ?: receivedAt,
                 spo2 = p[1].toIntOrNull(),
                 heartRate = p[2].toIntOrNull(),
                 valid = p[3].toBooleanStrictOrNull() ?: false,
@@ -34,15 +36,28 @@ class WearReadingService : WearableListenerService() {
             )
             else -> return
         }
+
         if (HistoryStore.contains(this, reading.id)) return
         HistoryStore.add(this, reading)
-        MonitoringState.markReading(this, reading.timestampMs)
+
+        // Phone watchdog tracks link freshness, not the measurement's historical timestamp.
+        // A reconnect may replay queued readings that are minutes or hours old.
+        MonitoringState.markReading(this, receivedAt)
+
         val cfg = AppSettings.load(this)
+        val maxLiveAgeMs = maxOf(cfg.staleDataMs, MIN_LIVE_REPLAY_AGE_MS)
+        val ageMs = (receivedAt - reading.timestampMs).coerceAtLeast(0L)
+        if (ageMs > maxLiveAgeMs) return
+
         val e = if (engine == null || activeConfig != cfg) {
             activeConfig = cfg
             AlarmEngine(cfg).also { engine = it }
         } else engine!!
         val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
         e.evaluate(reading).forEach { AlertDispatcher(this).dispatch(it, recent, reading) }
+    }
+
+    companion object {
+        private const val MIN_LIVE_REPLAY_AGE_MS = 10 * 60_000L
     }
 }
