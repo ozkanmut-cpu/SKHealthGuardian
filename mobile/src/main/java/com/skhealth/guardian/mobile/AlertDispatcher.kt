@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.HealthReading
-import com.skhealth.guardian.shared.SequentialFailover
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -26,33 +25,83 @@ class AlertDispatcher(private val context: Context) {
         val current = reading ?: alert.reading
         val contacts = ContactStore.contacts(context)
         val time = SimpleDateFormat("HH:mm:ss", Locale("tr", "TR")).format(Date(alert.timestampMs))
-        val history = if (recent.isEmpty()) "" else recent.takeLast(4).joinToString("\n", prefix="\nSon ölçümler:\n")
+        val history = if (recent.isEmpty()) "" else recent.takeLast(4).joinToString("\n", prefix = "\nSon ölçümler:\n")
         val text = "KRİTİK SAĞLIK UYARISI\n${alert.message}\nSaat: $time$history"
 
-        AlarmTimelineStore.add(context, "ALARM", "${alert.message}; SpO₂=${current?.spo2 ?: "—"}; HR=${current?.heartRate ?: "—"}", alert.timestampMs)
+        AlarmTimelineStore.add(
+            context,
+            "ALARM",
+            "${alert.message}; SpO₂=${current?.spo2 ?: "—"}; HR=${current?.heartRate ?: "—"}",
+            alert.timestampMs
+        )
 
         val smsTargets = contacts.filter { it.smsEnabled }
-        val smsResults = smsTargets.map { contact ->
+        var smsAttempted = 0
+        var smsQueuedCount = 0
+        for (contact in smsTargets) {
+            if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
+                AlarmTimelineStore.add(context, "SMS İPTAL", "Alarm susturuldu; kalan ilk SMS gönderimleri durduruldu", alert.timestampMs)
+                break
+            }
+            smsAttempted++
             val ok = sms.send(contact.phoneNumber, text, alert.timestampMs, alertId)
-            DeliveryLogStore.add(context, "SMS", mask(contact.phoneNumber), ok, if (ok) "modem gönderim kuyruğuna alındı; sonuç bekleniyor" else "kuyruğa alınamadı / izin yok")
+            if (ok) smsQueuedCount++
+            DeliveryLogStore.add(
+                context,
+                "SMS",
+                mask(contact.phoneNumber),
+                ok,
+                if (ok) "modem gönderim kuyruğuna alındı; sonuç bekleniyor" else "kuyruğa alınamadı / izin yok"
+            )
             AlarmTimelineStore.add(context, "SMS", "${mask(contact.phoneNumber)} ${if (ok) "kuyruğa alındı" else "başlatılamadı"}")
-            ok
         }
-        val smsQueued = smsResults.isNotEmpty() && smsResults.all { it }
+        val smsQueued = smsAttempted > 0 && smsQueuedCount == smsAttempted
 
-        val callTarget = SequentialFailover.firstSuccessful(contacts.filter { it.callEnabled }) { candidate ->
+        var callTarget: EmergencyContact? = null
+        for (candidate in contacts.filter { it.callEnabled }) {
+            if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
+                AlarmTimelineStore.add(context, "ARAMA İPTAL", "Alarm susturuldu; kalan ilk aramalar durduruldu", alert.timestampMs)
+                break
+            }
             val ok = caller.call(candidate.phoneNumber)
-            DeliveryLogStore.add(context, "ARAMA", mask(candidate.phoneNumber), ok, if (ok) "arama başlatıldı" else "arama başlatılamadı; sıradaki kişi denenecek")
+            DeliveryLogStore.add(
+                context,
+                "ARAMA",
+                mask(candidate.phoneNumber),
+                ok,
+                if (ok) "arama başlatıldı" else "arama başlatılamadı; sıradaki kişi denenecek"
+            )
             AlarmTimelineStore.add(context, "ARAMA", "${mask(candidate.phoneNumber)} ${if (ok) "başlatıldı" else "başlatılamadı"}")
-            ok
+            if (ok) {
+                callTarget = candidate
+                break
+            }
         }
         val callOk = callTarget != null
+        val acknowledgedDuringDispatch = AlertAcknowledgementStore.isAcknowledged(context, alertId)
 
         val remoteStatus = buildString {
-            append(if (smsTargets.isEmpty()) "SMS kişisi yok" else if (smsQueued) "SMS kuyruğa alındı; gönderim sonucu loglanacak" else "SMS kuyruğa alınamadı")
-            append(" • ")
-            val callEnabled = contacts.any { it.callEnabled }
-            append(if (!callEnabled) "Arama kişisi yok" else if (callOk) "Arama başlatıldı ${callTarget?.let { mask(it.phoneNumber) }.orEmpty()}" else "Hiçbir arama kişisi başlatılamadı")
+            if (acknowledgedDuringDispatch) {
+                append("Alarm susturuldu; kalan uzak bildirimler durduruldu")
+            } else {
+                append(
+                    when {
+                        smsTargets.isEmpty() -> "SMS kişisi yok"
+                        smsAttempted == 0 -> "SMS gönderimi başlatılmadı"
+                        smsQueued -> "SMS kuyruğa alındı; gönderim sonucu loglanacak"
+                        else -> "Bazı SMS'ler kuyruğa alınamadı"
+                    }
+                )
+                append(" • ")
+                val callEnabled = contacts.any { it.callEnabled }
+                append(
+                    when {
+                        !callEnabled -> "Arama kişisi yok"
+                        callOk -> "Arama başlatıldı ${callTarget?.let { mask(it.phoneNumber) }.orEmpty()}"
+                        else -> "Hiçbir arama kişisi başlatılamadı"
+                    }
+                )
+            }
         }
 
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {
@@ -67,9 +116,15 @@ class AlertDispatcher(private val context: Context) {
             putExtra(AlarmActivity.EXTRA_ALERT_TS, alert.timestampMs)
         }
 
-        localNotification(alarmIntent, alert)
-        scheduleEscalation(alertId, alert)
-        runCatching { context.startActivity(alarmIntent) }
+        if (!acknowledgedDuringDispatch) {
+            localNotification(alarmIntent, alert)
+            if (!AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
+                scheduleEscalation(alertId, alert)
+            }
+            if (!AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
+                runCatching { context.startActivity(alarmIntent) }
+            }
+        }
     }
 
     private fun scheduleEscalation(alertId: String, alert: AlertEvent) {
