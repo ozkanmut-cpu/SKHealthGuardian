@@ -20,20 +20,37 @@ data class Pc60Status(
 object Pc60StatusStore {
     private const val PREF = "pc60_status"
 
+    @Synchronized
     fun save(context: Context, status: Pc60Status) {
+        val current = load(context)
+        val incomingIsOlder = status.lastPacketAt > 0L && current.lastPacketAt > 0L && status.lastPacketAt < current.lastPacketAt
+        val merged = if (incomingIsOlder) {
+            current.copy(
+                state = status.state,
+                deviceName = status.deviceName.ifBlank { current.deviceName },
+                address = status.address.ifBlank { current.address },
+                packetCount = maxOf(current.packetCount, status.packetCount)
+            )
+        } else {
+            status.copy(
+                lastPacketAt = maxOf(current.lastPacketAt, status.lastPacketAt),
+                packetCount = maxOf(current.packetCount, status.packetCount)
+            )
+        }
+
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
-            .putString("state", status.state)
-            .putString("name", status.deviceName)
-            .putString("address", status.address)
-            .putLong("last_packet", status.lastPacketAt)
-            .putLong("packet_count", status.packetCount)
-            .putString("last_hex", status.lastPacketHex)
-            .putInt("spo2", status.spo2 ?: -1)
-            .putInt("heart_rate", status.heartRate ?: -1)
-            .putLong("pi_bits", java.lang.Double.doubleToRawLongBits(status.perfusionIndex ?: Double.NaN))
-            .putInt("battery", status.batteryLevel ?: -1)
-            .putBoolean("probe_off", status.probeOff)
-            .putBoolean("pulse_searching", status.pulseSearching)
+            .putString("state", merged.state)
+            .putString("name", merged.deviceName)
+            .putString("address", merged.address)
+            .putLong("last_packet", merged.lastPacketAt)
+            .putLong("packet_count", merged.packetCount)
+            .putString("last_hex", merged.lastPacketHex)
+            .putInt("spo2", merged.spo2 ?: -1)
+            .putInt("heart_rate", merged.heartRate ?: -1)
+            .putLong("pi_bits", java.lang.Double.doubleToRawLongBits(merged.perfusionIndex ?: Double.NaN))
+            .putInt("battery", merged.batteryLevel ?: -1)
+            .putBoolean("probe_off", merged.probeOff)
+            .putBoolean("pulse_searching", merged.pulseSearching)
             .apply()
     }
 
