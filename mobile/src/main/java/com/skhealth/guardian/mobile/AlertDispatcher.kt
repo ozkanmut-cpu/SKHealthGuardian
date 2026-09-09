@@ -63,7 +63,7 @@ class AlertDispatcher(private val context: Context) {
                 AlarmTimelineStore.add(context, "ARAMA İPTAL", "Alarm susturuldu; kalan ilk aramalar durduruldu", alert.timestampMs)
                 break
             }
-            val ok = caller.call(candidate.phoneNumber)
+            val ok = caller.call(candidate.phoneNumber, alert.timestampMs, alertId)
             DeliveryLogStore.add(
                 context,
                 "ARAMA",
