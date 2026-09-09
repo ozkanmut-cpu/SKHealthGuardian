@@ -17,6 +17,9 @@ class AlertDispatcher(private val context: Context) {
     private val caller = CallPlacer(context)
 
     fun dispatch(alert: AlertEvent, recent: List<String>, reading: HealthReading? = null) {
+        if (!AlertDeduplicator.shouldDispatch(context, alert)) return
+
+        val current = reading ?: alert.reading
         val contacts = ContactStore.contacts(context)
         val time = SimpleDateFormat("HH:mm:ss", Locale("tr", "TR")).format(Date(alert.timestampMs))
         val history = if (recent.isEmpty()) "" else recent.takeLast(4).joinToString("\n", prefix="\nSon ölçümler:\n")
@@ -35,8 +38,8 @@ class AlertDispatcher(private val context: Context) {
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(AlarmActivity.EXTRA_REASON, alert.message)
-            putExtra(AlarmActivity.EXTRA_SPO2, reading?.spo2 ?: -1)
-            putExtra(AlarmActivity.EXTRA_HR, reading?.heartRate ?: -1)
+            putExtra(AlarmActivity.EXTRA_SPO2, current?.spo2 ?: -1)
+            putExtra(AlarmActivity.EXTRA_HR, current?.heartRate ?: -1)
             putExtra(AlarmActivity.EXTRA_REMOTE_STATUS, remoteStatus)
         }
         context.startActivity(alarmIntent)
