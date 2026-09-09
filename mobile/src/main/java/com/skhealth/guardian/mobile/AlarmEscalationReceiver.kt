@@ -21,7 +21,7 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         val text = "SK HEALTH GUARDIAN TEKRAR UYARI\n$reason\nAlarm henüz susturulmadı/onaylanmadı."
 
         contacts.filter { it.smsEnabled }.forEach { c ->
-            val ok = SmsSender(context).send(c.phoneNumber, text)
+            val ok = SmsSender(context).send(c.phoneNumber, text, alertTs)
             DeliveryLogStore.add(context, "SMS ESCALATION", mask(c.phoneNumber), ok, if (ok) "tekrar SMS kuyruğa alındı" else "tekrar SMS başlatılamadı")
         }
 
@@ -29,6 +29,7 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
         val preferred = if (callTargets.size > 1) callTargets.drop(1) + callTargets.take(1) else callTargets
         var callOk = false
         for (c in preferred) {
+            if (AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs) break
             callOk = CallPlacer(context).call(c.phoneNumber)
             DeliveryLogStore.add(context, "ARAMA ESCALATION", mask(c.phoneNumber), callOk, if (callOk) "tekrar arama başlatıldı" else "başlatılamadı")
             if (callOk) break
