@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertType
+import com.skhealth.guardian.shared.WatchConnectionPolicy
 import com.skhealth.guardian.shared.WatchdogPolicy
 import kotlinx.coroutines.*
 
@@ -35,6 +36,23 @@ class WatchdogService : Service() {
                         HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
                     )
                 }
+
+                val lastHeartbeat = WatchHeartbeatStore.timestamp(this@WatchdogService)
+                val disconnectAlertedFor = WatchHeartbeatStore.lastDisconnectAlertedFor(this@WatchdogService)
+                if (WatchConnectionPolicy.shouldAlert(now, lastHeartbeat, WATCH_HEARTBEAT_TIMEOUT_MS, disconnectAlertedFor)) {
+                    // Bind the incident to the last heartbeat before dispatch; reboot/restart cannot duplicate it.
+                    WatchHeartbeatStore.markDisconnectAlertedFor(this@WatchdogService, lastHeartbeat)
+                    AlertDispatcher(this@WatchdogService).dispatch(
+                        AlertEvent(
+                            AlertType.WATCH_DISCONNECTED,
+                            now,
+                            null,
+                            "Saat bağlantısı kesildi; 3 dakikadır heartbeat alınamıyor"
+                        ),
+                        HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
+                    )
+                }
+
                 val phoneBattery = getSystemService(BatteryManager::class.java)
                     .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 BatteryAlertHelper.update(this@WatchdogService, "phone", "Telefon", phoneBattery)
@@ -46,4 +64,8 @@ class WatchdogService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
+
+    companion object {
+        private const val WATCH_HEARTBEAT_TIMEOUT_MS = 3 * 60_000L
+    }
 }
