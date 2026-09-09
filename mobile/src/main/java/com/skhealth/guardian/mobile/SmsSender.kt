@@ -27,7 +27,6 @@ class SmsSender(private val context: Context) {
             val sentIntents = ArrayList<PendingIntent>(parts.size)
             val deliveredIntents = ArrayList<PendingIntent>(parts.size)
             parts.indices.forEach { index ->
-                val commonRequestCode = messageId.hashCode() * 31 + attempt * 1000 + index
                 val sentIntent = Intent(context, SmsStatusReceiver::class.java).apply {
                     action = SmsStatusReceiver.ACTION_SMS_SENT
                     data = Uri.parse("skhealth://sms/sent/${Uri.encode(messageId)}/$attempt/$index")
@@ -43,7 +42,7 @@ class SmsSender(private val context: Context) {
                 }
                 sentIntents += PendingIntent.getBroadcast(
                     context,
-                    commonRequestCode,
+                    0,
                     sentIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
@@ -61,7 +60,7 @@ class SmsSender(private val context: Context) {
                 }
                 deliveredIntents += PendingIntent.getBroadcast(
                     context,
-                    commonRequestCode xor 0x5A5A5A5A,
+                    0,
                     deliveredIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
