@@ -140,19 +140,22 @@ object QaExactChaosRunner {
                 }
 
                 7 -> {
-                    if (leaseStartedAt.isNotEmpty()) {
-                        val entry = leaseStartedAt.entries.elementAt(random.nextInt(leaseStartedAt.size))
-                        val rolledBack = (entry.value - random.nextLong(1L, 60_000L)).coerceAtLeast(1L)
-                        clockRollbacks++
-                        if (ExecutionLeasePolicy.canAcquire(
-                                delivered.contains(entry.key),
-                                entry.value,
-                                rolledBack,
-                                LEASE_MS
-                            )) {
-                            violations += "clock rollback expired active lease at op=$index id=${entry.key}"
+                    if (alarms.isNotEmpty()) {
+                        val target = alarms[random.nextInt(alarms.size)]
+                        val leaseStart = leaseStartedAt[target.id] ?: 0L
+                        if (leaseStart > 0L) {
+                            val rolledBack = (leaseStart - random.nextLong(1L, 60_000L)).coerceAtLeast(1L)
+                            clockRollbacks++
+                            if (ExecutionLeasePolicy.canAcquire(
+                                    delivered.contains(target.id),
+                                    leaseStart,
+                                    rolledBack,
+                                    LEASE_MS
+                                )) {
+                                violations += "clock rollback expired active lease at op=$index id=${target.id}"
+                            }
+                            wallClock = rolledBack
                         }
-                        wallClock = rolledBack
                     }
                 }
 
