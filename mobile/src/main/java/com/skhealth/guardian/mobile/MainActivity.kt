@@ -89,6 +89,7 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply { text = "Saat self-test gönder"; setOnClickListener { sendSelfTest() } })
         root.addView(Button(this).apply { text = "Self-test / saat durumu"; setOnClickListener { showStatus() } })
         root.addView(Button(this).apply { text = "Sistem sağlık kontrolü"; setOnClickListener { startActivity(Intent(this@MainActivity, SystemHealthActivity::class.java)) } })
+        root.addView(Button(this).apply { text = "Saat doğrulama (Watch ↔ PC-60FW)"; setOnClickListener { startActivity(Intent(this@MainActivity, SpO2ReliabilityActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Alarm olay geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, AlarmTimelineActivity::class.java)) } })
         root.addView(Button(this).apply { text = "SMS / arama kayıtları"; setOnClickListener { startActivity(Intent(this@MainActivity, DeliveryLogActivity::class.java)) } })
         root.addView(Button(this).apply { text = "Ölçüm geçmişi"; setOnClickListener { startActivity(Intent(this@MainActivity, HistoryActivity::class.java)) } })
