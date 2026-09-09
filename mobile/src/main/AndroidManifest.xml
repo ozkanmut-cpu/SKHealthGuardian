@@ -24,6 +24,8 @@
         <activity android:name=".HistoryChartActivity" android:exported="false" />
         <activity android:name=".HistoryActivity" android:exported="false" />
         <activity android:name=".Pc60Activity" android:exported="false" />
+        <activity android:name=".DevicesActivity" android:exported="false" />
+        <activity android:name=".SettingsHubActivity" android:exported="false" />
         <activity android:name=".MeasurementSettingsActivity" android:exported="false" />
         <activity android:name=".ContactsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
