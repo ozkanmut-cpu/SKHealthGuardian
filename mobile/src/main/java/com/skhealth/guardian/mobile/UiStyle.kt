@@ -37,21 +37,37 @@ object UiStyle {
     }
     fun sectionParams(context: Context, top: Int = 12) = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin=dp(context,top) }
     fun divider(context: Context)=View(context).apply { setBackgroundColor(0xFF2A333D.toInt()); layoutParams=LinearLayout.LayoutParams(-1,dp(context,1)).apply{topMargin=dp(context,12);bottomMargin=dp(context,12)} }
-    fun page(context: Context)=LinearLayout(context).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(context,20),dp(context,18),dp(context,20),dp(context,32)); setBackgroundColor(BG) }
+    fun page(context: Context)=LinearLayout(context).apply {
+        orientation=LinearLayout.VERTICAL
+        setPadding(dp(context,20),dp(context,18),dp(context,20),dp(context,32))
+        setBackgroundColor(BG)
+        applyBottomInset(this, 8)
+    }
     fun title(context: Context, value:String)=text(context,value,27f,TEXT,true).apply{setPadding(0,0,0,dp(context,6))}
     fun subtitle(context: Context,value:String)=text(context,value,15f,MUTED).apply{setPadding(0,0,0,dp(context,16))}
     fun sectionTitle(context:Context,value:String)=text(context,value,20f,TEXT,true).apply{setPadding(0,dp(context,22),0,dp(context,10))}
-    fun field(context:Context,label:String,value:String="",numeric:Boolean=false)=LinearLayout(context).apply{
+
+    // Backwards-compatible plain field used by forms such as ContactsActivity.
+    fun field(context:Context,label:String,value:String="",numeric:Boolean=false)=EditText(context).apply{
+        hint=label; setText(value); setTextColor(TEXT); setHintTextColor(MUTED); textSize=16f
+        setPadding(dp(context,16),dp(context,13),dp(context,16),dp(context,13)); background=rounded(SURFACE_2,14,0xFF303A46.toInt(),1,context)
+        if(numeric) inputType=android.text.InputType.TYPE_CLASS_NUMBER
+        layoutParams=sectionParams(context,8)
+    }
+
+    // Persistent label + value field for settings where the meaning must remain visible after a value is populated.
+    fun labeledField(context:Context,label:String,value:String="",numeric:Boolean=false)=LinearLayout(context).apply{
         orientation=LinearLayout.VERTICAL
         layoutParams=sectionParams(context,10)
         addView(text(context,label,12.5f,MUTED,true).apply{setPadding(dp(context,2),0,0,dp(context,6))})
         addView(EditText(context).apply{
-            tag="value"; setText(value); setTextColor(TEXT); setHintTextColor(MUTED); textSize=16f
+            tag="labeled-value"; setText(value); setTextColor(TEXT); setHintTextColor(MUTED); textSize=16f
             setPadding(dp(context,16),dp(context,13),dp(context,16),dp(context,13)); background=rounded(SURFACE_2,14,0xFF303A46.toInt(),1,context)
             if(numeric) inputType=android.text.InputType.TYPE_CLASS_NUMBER
         },LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
     }
-    fun fieldInput(container: LinearLayout): EditText = container.findViewWithTag("value")
+    fun labeledFieldInput(container: LinearLayout): EditText = container.findViewWithTag("labeled-value")
+
     fun check(context:Context,label:String,checked:Boolean=false)=CheckBox(context).apply{ text=label; isChecked=checked; setTextColor(TEXT); textSize=16f; buttonTintList=android.content.res.ColorStateList.valueOf(BLUE); setPadding(dp(context,4),dp(context,8),0,dp(context,8)) }
     fun button(context:Context,label:String,primary:Boolean=true)=Button(context).apply{
         text=label; isAllCaps=false; textSize=16f; setTypeface(typeface,Typeface.BOLD); setTextColor(TEXT); background=rounded(if(primary) 0xFF1677FF.toInt() else SURFACE_2,18,if(primary) null else 0xFF405064.toInt(),1,context); minHeight=dp(context,54); layoutParams=sectionParams(context,10)
