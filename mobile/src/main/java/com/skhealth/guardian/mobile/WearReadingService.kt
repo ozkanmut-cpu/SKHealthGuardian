@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import com.skhealth.guardian.shared.AlarmEngine
+import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.HealthReading
 
 class WearReadingService : WearableListenerService() {
@@ -25,7 +26,21 @@ class WearReadingService : WearableListenerService() {
             return
         }
         if (event.path == "/health/alarm_ack") {
-            val p = String(event.data).split('|', limit = 2)
+            val raw = String(event.data)
+            if (raw.startsWith("v2|")) {
+                val p = raw.split('|', limit = 5)
+                val alertId = p.getOrNull(2).orEmpty()
+                val alertTs = p.getOrNull(3)?.toLongOrNull() ?: 0L
+                val reason = p.getOrNull(4).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
+                if (!AlertIdentity.isValid(alertId)) return
+                AlertAcknowledgementStore.acknowledge(this, alertId)
+                EscalationScheduler.cancel(this, alertId, alertTs)
+                getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
+                AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, if (alertTs > 0L) alertTs else System.currentTimeMillis())
+                return
+            }
+
+            val p = raw.split('|', limit = 2)
             val alertTs = p.getOrNull(0)?.toLongOrNull() ?: return
             val reason = p.getOrNull(1).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
             AlertAcknowledgementStore.acknowledge(this, alertTs)
