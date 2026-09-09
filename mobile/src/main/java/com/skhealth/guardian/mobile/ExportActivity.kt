@@ -18,8 +18,7 @@ class ExportActivity : Activity() {
         super.onCreate(savedInstanceState)
         UiStyle.applyBars(this)
         val root = UiStyle.page(this)
-        root.addView(UiStyle.title(this, "Veri yönetimi"))
-        root.addView(UiStyle.subtitle(this, "Ölçümlerini dışa aktar, tam uygulama yedeği oluştur veya daha önce alınmış bir yedeği geri yükle."))
+        root.addView(UiStyle.detailHeader(this, "Veri yönetimi", "Ölçümlerini dışa aktar, tam uygulama yedeği oluştur veya daha önce alınmış bir yedeği geri yükle."))
 
         val exportCard = UiStyle.card(this)
         exportCard.addView(UiStyle.text(this, "Dışa aktar", 19f, UiStyle.TEXT, true))
