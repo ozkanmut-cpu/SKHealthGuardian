@@ -27,6 +27,7 @@ class SystemHealthActivity : Activity() {
         val lastReading = MonitoringState.lastReading(this)
         val heartbeat = WatchHeartbeatStore.timestamp(this)
         val watchBattery = WatchHeartbeatStore.battery(this)
+        val watchConnected = SourcePriorityCoordinator.isWatchConnected(this, now)
         val phoneBattery = getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
         val checks = listOf(
             "SMS izni" to has(Manifest.permission.SEND_SMS),
@@ -35,18 +36,20 @@ class SystemHealthActivity : Activity() {
             "Bluetooth bağlantısı" to (Build.VERSION.SDK_INT < 31 || has(Manifest.permission.BLUETOOTH_CONNECT)),
             "Tam ekran alarm" to canUseFullScreenIntent(),
             "Pil optimizasyonu" to isIgnoringBatteryOptimization(),
-            "Watch veri akışı" to (lastReading > 0 && now - lastReading <= stale),
-            "Watch heartbeat" to (heartbeat > 0 && now - heartbeat <= 3 * 60_000L)
+            "Galaxy Watch bağlantısı" to watchConnected,
+            "Galaxy Watch veri akışı" to (lastReading > 0 && now - lastReading <= stale && heartbeat > 0 && now - heartbeat <= 3 * 60_000L)
         )
         val okCount = checks.count { it.second }
         root.addView(UiStyle.title(this, "Sistem sağlığı"))
-        root.addView(UiStyle.subtitle(this, "İzinlar, bağlantılar ve arka plan çalışma koşullarını tek ekrandan kontrol et.".replace("İzinlar", "İzinler")))
+        root.addView(UiStyle.subtitle(this, "İzinler, bağlantılar ve arka plan çalışma koşullarını tek ekrandan kontrol et."))
 
         val summary = UiStyle.card(this)
         val ready = okCount == checks.size
+        val source = SourcePriorityCoordinator.activeSourceLabel(this, now)
+        val sourceText = if (source == "Aktif kaynak yok") "Yok" else source
         summary.background = UiStyle.rounded(if (ready) 0xFF123222.toInt() else 0xFF332719.toInt(), context = this)
         summary.addView(UiStyle.text(this, if (ready) "✓ SİSTEM HAZIR" else "⚠ $okCount/${checks.size} kontrol başarılı", 20f, if (ready) UiStyle.GREEN else UiStyle.AMBER, true))
-        summary.addView(UiStyle.text(this, "Aktif alarm kaynağı: ${SourcePriorityCoordinator.activeSourceLabel(this, now)}", 15f, UiStyle.TEXT).apply { setPadding(0, UiStyle.dp(this@SystemHealthActivity, 8), 0, 0) })
+        summary.addView(UiStyle.text(this, "Alarm kaynağı: $sourceText", 15f, UiStyle.TEXT).apply { setPadding(0, UiStyle.dp(this@SystemHealthActivity, 8), 0, 0) })
         root.addView(summary)
 
         val checksCard = UiStyle.card(this)
@@ -58,7 +61,8 @@ class SystemHealthActivity : Activity() {
 
         val device = UiStyle.card(this)
         device.addView(UiStyle.text(this, "Cihaz durumu", 19f, UiStyle.TEXT, true))
-        device.addView(UiStyle.text(this, "Saat pili: ${if (watchBattery >= 0) "%$watchBattery" else "bilinmiyor"}\nTelefon pili: %$phoneBattery\nSaat durumu: ${WatchStatusStore.status(this)}", 16f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@SystemHealthActivity, 8), 0, 0) })
+        val watchState = if (watchConnected) "Bağlı" else "Bağlı değil"
+        device.addView(UiStyle.text(this, "Galaxy Watch: $watchState\nSaat pili: ${if (watchBattery >= 0) "%$watchBattery" else "—"}\nTelefon pili: %$phoneBattery", 16f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@SystemHealthActivity, 8), 0, 0) })
         root.addView(device, UiStyle.sectionParams(this))
 
         val reliability = UiStyle.card(this)
