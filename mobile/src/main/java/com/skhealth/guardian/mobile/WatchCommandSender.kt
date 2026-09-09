@@ -6,6 +6,7 @@ import com.skhealth.guardian.shared.AlarmConfig
 
 class WatchCommandSender(private val context: Context) {
     fun requestMeasurement() = send("/health/measure_now", ByteArray(0))
+    fun silenceAlarm() = send("/health/silence", ByteArray(0))
 
     fun sendConfig(config: AlarmConfig) {
         val payload = listOf(
