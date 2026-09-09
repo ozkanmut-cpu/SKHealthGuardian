@@ -13,7 +13,8 @@ object AlertAcknowledgementStore {
     fun acknowledge(context: Context, alertId: String) {
         if (!AlertIdentity.isValid(alertId)) return
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        BoundedIdStore.add(prefs, KEY_ACK_IDS, alertId, MAX_ACK_IDS)
+        val protected = EscalationScheduler.pendingExactAlertIds(context)
+        BoundedIdStore.add(prefs, KEY_ACK_IDS, alertId, MAX_ACK_IDS, protected)
     }
 
     fun isAcknowledged(context: Context, alertId: String): Boolean {
