@@ -1,11 +1,11 @@
 package com.skhealth.guardian.mobile
 
-import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.HealthReading
@@ -54,6 +54,8 @@ class AlertDispatcher(private val context: Context) {
         }
 
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {
+            action = "com.skhealth.guardian.mobile.SHOW_ALARM"
+            data = Uri.parse("skhealth://alarm/${alert.timestampMs}/${alert.type.name}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(AlarmActivity.EXTRA_REASON, alert.message)
             putExtra(AlarmActivity.EXTRA_SPO2, current?.spo2 ?: -1)
@@ -70,23 +72,15 @@ class AlertDispatcher(private val context: Context) {
     private fun scheduleEscalation(alert: AlertEvent) {
         val minutes = AppSettings.escalationMinutes(context)
         if (minutes <= 0) return
-        val intent = Intent(context, AlarmEscalationReceiver::class.java).apply {
-            putExtra(AlarmEscalationReceiver.EXTRA_ALERT_TS, alert.timestampMs)
-            putExtra(AlarmEscalationReceiver.EXTRA_REASON, alert.message)
-        }
-        val pi = PendingIntent.getBroadcast(context, alert.timestampMs.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + minutes * 60_000L,
-            pi
-        )
+        val dueAt = System.currentTimeMillis() + minutes * 60_000L
+        EscalationScheduler.schedule(context, alert.timestampMs, alert.message, dueAt)
         AlarmTimelineStore.add(context, "ESCALATION PLANLANDI", "$minutes dk içinde alarm susturulmazsa tekrar iletişim kurulacak")
     }
 
     private fun localNotification(alert: AlertEvent, alarmIntent: Intent) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
-        val pi = PendingIntent.getActivity(context, alert.timestampMs.toInt(), alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pi = PendingIntent.getActivity(context, 0, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         nm.notify(
             AlarmActivity.CRITICAL_NOTIFICATION_ID,
             NotificationCompat.Builder(context, "critical")
