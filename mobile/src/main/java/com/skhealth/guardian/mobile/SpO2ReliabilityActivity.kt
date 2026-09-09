@@ -28,38 +28,51 @@ class SpO2ReliabilityActivity : Activity() {
 
         root.addView(TextView(this).apply { text = "Watch Doğrulama"; textSize = 27f; setTypeface(typeface, Typeface.BOLD) })
         root.addView(TextView(this).apply {
-            text = "Galaxy Watch ile PC-60FW eşzamanlı SpO₂ ölçümleri karşılaştırılır. Saat değeri değiştirilmez; bu yalnız güvenilirlik analizidir."
+            text = "Galaxy Watch ile PC-60FW eşzamanlı SpO₂ ve nabız ölçümleri karşılaştırılır. Saat değeri değiştirilmez; bu yalnız güvenilirlik analizidir. PC-60FW geçerli ve tazeyken alarm kararında ana kaynaktır."
             textSize = 15f; setPadding(0, 10, 0, 18)
         })
 
         val mae = s.meanAbsoluteError?.let { String.format(Locale.US, "%.1f", it) } ?: "—"
         val bias = s.meanBias?.let { String.format(Locale.US, "%+.1f", it) } ?: "—"
+        val hrMae = s.hrMeanAbsoluteError?.let { String.format(Locale.US, "%.1f", it) } ?: "—"
+        val hrBias = s.hrMeanBias?.let { String.format(Locale.US, "%+.1f", it) } ?: "—"
         root.addView(TextView(this).apply { text = s.label; textSize = 22f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 6, 0, 8) })
         root.addView(TextView(this).apply {
-            text = "${s.count} karşılaştırma • ort. fark $mae puan • sapma $bias puan\nAktif alarm kaynağı: ${SourcePriorityCoordinator.activeSourceLabel(this@SpO2ReliabilityActivity)}"
+            text = buildString {
+                append("SpO₂: ${s.count} karşılaştırma • ort. fark $mae puan • sapma $bias puan")
+                append("\nNabız: ${s.hrCount} karşılaştırma • ort. fark $hrMae bpm • sapma $hrBias bpm")
+                append("\nAktif alarm kaynağı: ${SourcePriorityCoordinator.activeSourceLabel(this@SpO2ReliabilityActivity)}")
+            }
             textSize = 16f; setPadding(0, 0, 0, 18)
         })
         root.addView(TextView(this).apply {
             text = when {
-                s.count < 5 -> "Daha güvenilir yorum için en az 5 eşzamanlı ölçüm gerekiyor."
-                (s.meanAbsoluteError ?: Double.MAX_VALUE) <= 2.0 -> "Saat ile parmak oksimetresi arasında güçlü uyum var."
-                (s.meanBias ?: 0.0) >= 5.0 -> "Saat belirgin şekilde daha yüksek okuyor. Alarm kararında PC-60FW önceliği korunur."
-                (s.meanBias ?: 0.0) <= -5.0 -> "Saat belirgin şekilde daha düşük okuyor. Alarm kararında PC-60FW önceliği korunur."
-                else -> "Ölçümler arasında fark var; daha fazla eşleşmeyle değerlendirme güçlenecek."
+                s.count < 5 -> "Daha güvenilir SpO₂ yorumu için en az 5 eşzamanlı ölçüm gerekiyor. Nabız karşılaştırması da yeterli eşleşme oluşunca ayrıca değerlendirilir."
+                (s.meanAbsoluteError ?: Double.MAX_VALUE) <= 2.0 -> "Saat ile parmak oksimetresi arasında SpO₂ açısından güçlü uyum var. Nabız farkı ayrıca yukarıda gösterilir."
+                (s.meanBias ?: 0.0) >= 5.0 -> "Saat SpO₂'yi belirgin şekilde daha yüksek okuyor. Alarm kararında PC-60FW önceliği korunur."
+                (s.meanBias ?: 0.0) <= -5.0 -> "Saat SpO₂'yi belirgin şekilde daha düşük okuyor. Alarm kararında PC-60FW önceliği korunur."
+                else -> "Ölçümler arasında fark var; daha fazla eşleşmeyle SpO₂ ve nabız değerlendirmesi güçlenecek."
             }
             textSize = 17f; setPadding(0, 0, 0, 22)
         })
 
-        root.addView(TextView(this).apply { text = "Fark grafiği • Watch − PC-60FW"; textSize = 19f; setTypeface(typeface, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = "SpO₂ fark grafiği • Watch − PC-60FW"; textSize = 19f; setTypeface(typeface, Typeface.BOLD) })
         root.addView(ReliabilityChartView(this, matches).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 420) })
         root.addView(TextView(this).apply { text = "Son eşleşmeler"; textSize = 19f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 22, 0, 8) })
 
         if (matches.isEmpty()) root.addView(TextView(this).apply { text = "Henüz eşzamanlı Watch-PC60 ölçümü yok."; textSize = 16f })
         else {
-            val fmt = SimpleDateFormat("dd.MM HH:mm:ss", Locale("tr", "TR"))
+            val fmt = SimpleDateFormat("dd.MM HH:mm:ss", Locale.forLanguageTag("tr-TR"))
             matches.takeLast(20).asReversed().forEach { m ->
                 val sign = if (m.diff > 0) "+" else ""
-                root.addView(TextView(this).apply { text = "${fmt.format(Date(m.timestampMs))} • Watch ${m.watch}% • PC60 ${m.pc60}% • fark $sign${m.diff}"; textSize = 16f; setPadding(0, 8, 0, 8) })
+                val hr = m.hrDiff?.let { d ->
+                    val hrSign = if (d > 0) "+" else ""
+                    "\nNabız: Watch ${m.watchHr} / PC60 ${m.pc60Hr} • fark $hrSign$d bpm"
+                } ?: "\nNabız: eşleşen veri yok"
+                root.addView(TextView(this).apply {
+                    text = "${fmt.format(Date(m.timestampMs))} • SpO₂ Watch ${m.watch}% / PC60 ${m.pc60}% • fark $sign${m.diff}$hr"
+                    textSize = 16f; setPadding(0, 8, 0, 8)
+                })
             }
         }
     }
