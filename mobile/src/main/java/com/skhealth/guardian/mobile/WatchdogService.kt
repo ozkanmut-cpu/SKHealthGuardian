@@ -29,7 +29,6 @@ class WatchdogService : Service() {
                 val stale = AppSettings.load(this@WatchdogService).staleDataMs
                 val lastAlertedFor = MonitoringState.lastStaleAlertedFor(this@WatchdogService)
                 if (WatchdogPolicy.shouldAlert(now, last, stale, lastAlertedFor)) {
-                    // Persist before dispatch so a service/process restart cannot duplicate the same stale incident.
                     MonitoringState.markStaleAlertedFor(this@WatchdogService, last)
                     AlertDispatcher(this@WatchdogService).dispatch(
                         AlertEvent(AlertType.DATA_STALE, now, null, "${stale / 60_000} dakikadır geçerli sağlık verisi gelmiyor"),
@@ -39,15 +38,16 @@ class WatchdogService : Service() {
 
                 val lastHeartbeat = WatchHeartbeatStore.timestamp(this@WatchdogService)
                 val disconnectAlertedFor = WatchHeartbeatStore.lastDisconnectAlertedFor(this@WatchdogService)
-                if (WatchConnectionPolicy.shouldAlert(now, lastHeartbeat, WATCH_HEARTBEAT_TIMEOUT_MS, disconnectAlertedFor)) {
-                    // Bind the incident to the last heartbeat before dispatch; reboot/restart cannot duplicate it.
+                val heartbeatTimeoutMin = AppSettings.watchHeartbeatTimeoutMinutes(this@WatchdogService)
+                val heartbeatTimeoutMs = heartbeatTimeoutMin * 60_000L
+                if (WatchConnectionPolicy.shouldAlert(now, lastHeartbeat, heartbeatTimeoutMs, disconnectAlertedFor)) {
                     WatchHeartbeatStore.markDisconnectAlertedFor(this@WatchdogService, lastHeartbeat)
                     AlertDispatcher(this@WatchdogService).dispatch(
                         AlertEvent(
                             AlertType.WATCH_DISCONNECTED,
                             now,
                             null,
-                            "Saat bağlantısı kesildi; 3 dakikadır heartbeat alınamıyor"
+                            "Saat bağlantısı kesildi; $heartbeatTimeoutMin dakikadır heartbeat alınamıyor"
                         ),
                         HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
                     )
@@ -64,8 +64,4 @@ class WatchdogService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() { scope.cancel(); super.onDestroy() }
-
-    companion object {
-        private const val WATCH_HEARTBEAT_TIMEOUT_MS = 3 * 60_000L
-    }
 }
