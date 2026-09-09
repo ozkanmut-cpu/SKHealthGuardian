@@ -16,6 +16,7 @@ class PhoneBridge(private val context: Context) {
             return
         }
 
+        flushAlarmAcknowledgement(nodes.map { it.id })
         flushQueued(nodes.map { it.id })
         val ok = nodes.all { node ->
             runCatching {
@@ -30,9 +31,35 @@ class PhoneBridge(private val context: Context) {
     suspend fun sendHeartbeat(batteryPct: Int) {
         val payload = "${System.currentTimeMillis()}|$batteryPct".toByteArray()
         val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
+        if (nodes.isNotEmpty()) flushAlarmAcknowledgement(nodes.map { it.id })
         nodes.forEach { node ->
             runCatching { Wearable.getMessageClient(context).sendMessage(node.id, "/health/heartbeat", payload).awaitCompat() }
         }
+    }
+
+    fun sendAlarmAcknowledgement(alertTimestampMs: Long, reason: String) {
+        val safeReason = reason.replace('|', ' ').replace('\n', ' ').take(160)
+        val payload = "$alertTimestampMs|$safeReason"
+        Wearable.getNodeClient(context).connectedNodes
+            .addOnSuccessListener { nodes ->
+                if (nodes.isEmpty()) {
+                    savePendingAck(payload)
+                    return@addOnSuccessListener
+                }
+                var remaining = nodes.size
+                var allOk = true
+                nodes.forEach { node ->
+                    Wearable.getMessageClient(context).sendMessage(node.id, "/health/alarm_ack", payload.toByteArray())
+                        .addOnFailureListener { allOk = false }
+                        .addOnCompleteListener {
+                            remaining--
+                            if (remaining == 0) {
+                                if (allOk) clearPendingAck() else savePendingAck(payload)
+                            }
+                        }
+                }
+            }
+            .addOnFailureListener { savePendingAck(payload) }
     }
 
     private suspend fun flushQueued(nodeIds: List<String>) {
@@ -47,6 +74,15 @@ class PhoneBridge(private val context: Context) {
             if (!ok) remaining += payload
         }
         saveQueue(remaining)
+    }
+
+    private suspend fun flushAlarmAcknowledgement(nodeIds: List<String>) {
+        val payload = prefs.getString(KEY_PENDING_ACK, null) ?: return
+        val bytes = payload.toByteArray()
+        val ok = nodeIds.all { id ->
+            runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }.isSuccess
+        }
+        if (ok) clearPendingAck()
     }
 
     private fun encode(reading: HealthReading): String = listOf(
@@ -71,8 +107,17 @@ class PhoneBridge(private val context: Context) {
         prefs.edit().putString(KEY_QUEUE, items.joinToString("\n")).apply()
     }
 
+    private fun savePendingAck(payload: String) {
+        prefs.edit().putString(KEY_PENDING_ACK, payload).apply()
+    }
+
+    private fun clearPendingAck() {
+        prefs.edit().remove(KEY_PENDING_ACK).apply()
+    }
+
     companion object {
         private const val KEY_QUEUE = "pending_readings"
+        private const val KEY_PENDING_ACK = "pending_alarm_ack"
         private const val MAX_QUEUE = 500
     }
 }
