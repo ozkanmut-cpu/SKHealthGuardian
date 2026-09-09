@@ -57,7 +57,7 @@ class AlarmEscalationReceiver : BroadcastReceiver() {
                 AlertAcknowledgementStore.lastAcknowledgedAt(context) >= alertTs
             }
             if (acknowledged) break
-            callOk = CallPlacer(context).call(c.phoneNumber)
+            callOk = CallPlacer(context).call(c.phoneNumber, alertTs, alertId.takeIf { exact })
             DeliveryLogStore.add(context, "ARAMA ESCALATION", mask(c.phoneNumber), callOk, if (callOk) "tekrar arama başlatıldı" else "başlatılamadı")
             if (callOk) break
         }
