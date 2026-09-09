@@ -19,10 +19,16 @@ android {
     }
 }
 
+val lepuBleAar = file("libs/lepu-blepro-1.3.7.aar")
+
 dependencies {
     implementation(project(":shared"))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("com.google.android.gms:play-services-wearable:19.0.0")
+    implementation("no.nordicsemi.android:ble:2.10.0")
+    if (lepuBleAar.exists()) {
+        implementation(files(lepuBleAar))
+    }
 }
