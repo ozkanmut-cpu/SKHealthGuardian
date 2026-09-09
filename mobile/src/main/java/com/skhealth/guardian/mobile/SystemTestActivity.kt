@@ -5,11 +5,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
-import android.widget.Button
-import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -24,22 +21,28 @@ class SystemTestActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 40) }
-        root.addView(TextView(this).apply { text = "Kurulum / QA sihirbazı"; textSize = 27f; setTypeface(typeface, Typeface.BOLD) })
-        root.addView(TextView(this).apply {
-            text = "Telefon, Galaxy Watch, acil kişiler ve PC-60FW zincirini tek ekranda doğrular. Gerçek SMS/arama yalnızca sen başlatırsan çalışır."
-            textSize = 15f; setPadding(0, 10, 0, 18)
-        })
-        summary = TextView(this).apply { textSize = 22f; setTypeface(typeface, Typeface.BOLD); setPadding(0, 8, 0, 16) }
-        output = TextView(this).apply { textSize = 16f; setPadding(0, 0, 0, 18) }
-        root.addView(summary)
-        root.addView(output)
-        root.addView(Button(this).apply { text = "Kontrolleri yeniden çalıştır"; setOnClickListener { runPreflight() } })
-        root.addView(Button(this).apply { text = "Galaxy Watch self-test + ölçüm"; setOnClickListener { runWatchTest() } })
-        root.addView(Button(this).apply { text = "PC-60FW durumunu aç"; setOnClickListener { startActivity(Intent(this@SystemTestActivity, Pc60Activity::class.java)) } })
-        root.addView(Button(this).apply { text = "Alarm ekranını güvenli test et"; setOnClickListener { previewAlarmScreen() } })
-        root.addView(Button(this).apply { text = "GERÇEK SMS + ARAMA TESTİ"; setOnClickListener { confirmRealCommunicationTest() } })
-        setContentView(ScrollView(this).apply { addView(root) })
+        UiStyle.applyBars(this)
+        val root = UiStyle.page(this)
+        root.addView(UiStyle.title(this, "QA ön kontrol"))
+        root.addView(UiStyle.subtitle(this, "Telefon, Galaxy Watch, acil kişiler ve PC-60FW zincirini doğrular. Gerçek SMS/arama yalnızca sen başlatırsan çalışır."))
+
+        val summaryCard = UiStyle.card(this)
+        summary = UiStyle.text(this, "Kontroller çalıştırılıyor…", 20f, UiStyle.BLUE, true)
+        summaryCard.addView(summary)
+        root.addView(summaryCard)
+
+        val detailsCard = UiStyle.card(this)
+        detailsCard.addView(UiStyle.text(this, "Kontrol ayrıntıları", 18f, UiStyle.TEXT, true))
+        output = UiStyle.text(this, "", 15f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@SystemTestActivity, 10), 0, 0) }
+        detailsCard.addView(output)
+        root.addView(detailsCard, UiStyle.sectionParams(this))
+
+        root.addView(UiStyle.button(this, "Kontrolleri yeniden çalıştır").apply { setOnClickListener { runPreflight() } })
+        root.addView(UiStyle.button(this, "Galaxy Watch self-test + ölçüm", false).apply { setOnClickListener { runWatchTest() } })
+        root.addView(UiStyle.button(this, "PC-60FW durumunu aç", false).apply { setOnClickListener { startActivity(Intent(this@SystemTestActivity, Pc60Activity::class.java)) } })
+        root.addView(UiStyle.button(this, "Alarm ekranını güvenli test et", false).apply { setOnClickListener { previewAlarmScreen() } })
+        root.addView(UiStyle.button(this, "Gerçek SMS + arama testi", false).apply { setOnClickListener { confirmRealCommunicationTest() } })
+        setContentView(ScrollView(this).apply { setBackgroundColor(UiStyle.BG); addView(root) })
         runPreflight()
     }
 
@@ -58,6 +61,7 @@ class SystemTestActivity : Activity() {
         val required = mutableListOf<Pair<String, Boolean>>()
         required += "SMS izni" to has(Manifest.permission.SEND_SMS)
         required += "Arama izni" to has(Manifest.permission.CALL_PHONE)
+        required += "Arama durum izni" to has(Manifest.permission.READ_PHONE_STATE)
         required += "Bildirim izni" to (Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS))
         required += "Bluetooth bağlantı izni" to (Build.VERSION.SDK_INT < 31 || has(Manifest.permission.BLUETOOTH_CONNECT))
         required += "Bluetooth tarama izni" to (Build.VERSION.SDK_INT < 31 || has(Manifest.permission.BLUETOOTH_SCAN))
@@ -91,11 +95,12 @@ class SystemTestActivity : Activity() {
             AlarmTimelineStore.add(this, "QA ÖN KONTROL", if (missing.isEmpty()) "Sistem hazır" else "Eksikler: ${missing.joinToString()}")
         }.addOnFailureListener {
             output.append("\n✗ Saat bağlantısı okunamadı: ${it.javaClass.simpleName}")
-            showSummary(false, listOf("Saat bağlantısı okunamadı"), 0, required.size + 1)
+            showSummary(false, listOf("Saat bağlantısı okunamadı"), required.count { it.second }, required.size + 1)
         }
     }
 
     private fun showSummary(ready: Boolean, missing: List<String>, passed: Int, total: Int) {
+        summary.setTextColor(if (ready) UiStyle.GREEN else UiStyle.AMBER)
         summary.text = if (ready) "✓ SİSTEM HAZIR\n$passed/$total kontrol başarılı" else "⚠ EKSİKLER VAR\n$passed/$total kontrol başarılı" + if (missing.isEmpty()) "" else "\n${missing.joinToString("\n") { "• $it" }}"
     }
 
