@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertType
+import com.skhealth.guardian.shared.TechnicalConnectivityCoalescingPolicy
 import com.skhealth.guardian.shared.WatchConnectionPolicy
 import com.skhealth.guardian.shared.WatchdogPolicy
 import kotlinx.coroutines.*
@@ -26,31 +27,51 @@ class WatchdogService : Service() {
             while (isActive) {
                 val now = System.currentTimeMillis()
                 val last = MonitoringState.lastReading(this@WatchdogService)
+                val lastHeartbeat = WatchHeartbeatStore.timestamp(this@WatchdogService)
                 val stale = AppSettings.load(this@WatchdogService).staleDataMs
                 val lastAlertedFor = MonitoringState.lastStaleAlertedFor(this@WatchdogService)
+                val disconnectAlertedFor = WatchHeartbeatStore.lastDisconnectAlertedFor(this@WatchdogService)
+
                 if (WatchdogPolicy.shouldAlert(now, last, stale, lastAlertedFor)) {
                     MonitoringState.markStaleAlertedFor(this@WatchdogService, last)
-                    AlertDispatcher(this@WatchdogService).dispatch(
-                        AlertEvent(AlertType.DATA_STALE, now, null, "${stale / 60_000} dakikadır geçerli sağlık verisi gelmiyor"),
-                        HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
-                    )
+                    if (TechnicalConnectivityCoalescingPolicy.suppressDataStale(last, lastHeartbeat, disconnectAlertedFor)) {
+                        AlarmTimelineStore.add(
+                            this@WatchdogService,
+                            "TEKNİK ALARM BİRLEŞTİRİLDİ",
+                            "Veri gelmeme alarmı aynı aktif saat bağlantı kesintisinin devamı olduğu için ikinci SMS/arama gönderilmedi",
+                            now
+                        )
+                    } else {
+                        AlertDispatcher(this@WatchdogService).dispatch(
+                            AlertEvent(AlertType.DATA_STALE, now, null, "${stale / 60_000} dakikadır geçerli sağlık verisi gelmiyor"),
+                            HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
+                        )
+                    }
                 }
 
-                val lastHeartbeat = WatchHeartbeatStore.timestamp(this@WatchdogService)
-                val disconnectAlertedFor = WatchHeartbeatStore.lastDisconnectAlertedFor(this@WatchdogService)
                 val heartbeatTimeoutMin = AppSettings.watchHeartbeatTimeoutMinutes(this@WatchdogService)
                 val heartbeatTimeoutMs = heartbeatTimeoutMin * 60_000L
+                val staleAlertedAfterCheck = MonitoringState.lastStaleAlertedFor(this@WatchdogService)
                 if (WatchConnectionPolicy.shouldAlert(now, lastHeartbeat, heartbeatTimeoutMs, disconnectAlertedFor)) {
                     WatchHeartbeatStore.markDisconnectAlertedFor(this@WatchdogService, lastHeartbeat)
-                    AlertDispatcher(this@WatchdogService).dispatch(
-                        AlertEvent(
-                            AlertType.WATCH_DISCONNECTED,
-                            now,
-                            null,
-                            "Saat bağlantısı kesildi; $heartbeatTimeoutMin dakikadır heartbeat alınamıyor"
-                        ),
-                        HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
-                    )
+                    if (TechnicalConnectivityCoalescingPolicy.suppressWatchDisconnected(last, lastHeartbeat, staleAlertedAfterCheck)) {
+                        AlarmTimelineStore.add(
+                            this@WatchdogService,
+                            "TEKNİK ALARM BİRLEŞTİRİLDİ",
+                            "Saat bağlantı kesilmesi aynı aktif veri gelmeme olayının devamı olduğu için ikinci SMS/arama gönderilmedi",
+                            now
+                        )
+                    } else {
+                        AlertDispatcher(this@WatchdogService).dispatch(
+                            AlertEvent(
+                                AlertType.WATCH_DISCONNECTED,
+                                now,
+                                null,
+                                "Saat bağlantısı kesildi; $heartbeatTimeoutMin dakikadır heartbeat alınamıyor"
+                            ),
+                            HistoryStore.formatted(this@WatchdogService, 4).lines().filter { it.isNotBlank() }
+                        )
+                    }
                 }
 
                 val phoneBattery = getSystemService(BatteryManager::class.java)
