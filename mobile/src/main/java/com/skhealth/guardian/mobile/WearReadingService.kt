@@ -1,5 +1,6 @@
 package com.skhealth.guardian.mobile
 
+import android.app.NotificationManager
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import com.skhealth.guardian.shared.AlarmEngine
@@ -21,6 +22,15 @@ class WearReadingService : WearableListenerService() {
             val battery = p.getOrNull(1)?.toIntOrNull() ?: -1
             WatchHeartbeatStore.mark(this, battery)
             BatteryAlertHelper.update(this, "watch", "Saat", battery)
+            return
+        }
+        if (event.path == "/health/alarm_ack") {
+            val p = String(event.data).split('|', limit = 2)
+            val alertTs = p.getOrNull(0)?.toLongOrNull() ?: return
+            val reason = p.getOrNull(1).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
+            AlertAcknowledgementStore.acknowledge(this, alertTs)
+            getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
+            AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, alertTs)
             return
         }
         if (event.path != "/health/reading") return
