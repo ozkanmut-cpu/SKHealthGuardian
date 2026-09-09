@@ -1,5 +1,6 @@
 package com.skhealth.guardian.wear
 
+import android.content.Intent
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
@@ -10,8 +11,15 @@ import kotlinx.coroutines.launch
 
 class WearCommandService : WearableListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onMessageReceived(event: MessageEvent) {
-        if (event.path != "/health/selftest") return
+        when (event.path) {
+            "/health/selftest" -> runSelfTest()
+            "/health/measure_now" -> startService(Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW))
+        }
+    }
+
+    private fun runSelfTest() {
         scope.launch {
             val status = runCatching {
                 val sensor = com.skhealth.guardian.wear.sensor.SamsungSensorGateway(this@WearCommandService)
