@@ -73,8 +73,10 @@ object QaChaosRunner {
                 }
 
                 4 -> {
+                    // ACK can only refer to an alarm that has actually existed. Delayed/replayed ACKs
+                    // may target the latest or an older alert, but never a future timestamp.
                     val candidate = when {
-                        latestAlertTs == 0L -> random.nextLong(0L, nextAlertTs + 1L)
+                        latestAlertTs == 0L -> 0L
                         random.nextBoolean() -> latestAlertTs
                         else -> random.nextLong(0L, latestAlertTs + 1L)
                     }
