@@ -20,11 +20,13 @@ class MonitorService : Service() {
     private val measurementMutex = Mutex()
     private lateinit var sensor: SensorGateway
     private lateinit var bridge: PhoneBridge
-    private val config = AlarmConfig()
-    private val engine = AlarmEngine(config)
+    private var activeConfig = AlarmConfig()
+    private var engine = AlarmEngine(activeConfig)
 
     override fun onCreate() {
         super.onCreate()
+        activeConfig = WearSettings.load(this)
+        engine = AlarmEngine(activeConfig)
         sensor = SamsungSensorGateway(this)
         bridge = PhoneBridge(this)
         createChannel()
@@ -51,6 +53,12 @@ class MonitorService : Service() {
     private suspend fun safeMeasureCycle() = measurementMutex.withLock { measureCycle() }
 
     private suspend fun measureCycle() {
+        val latest = WearSettings.load(this)
+        if (latest != activeConfig) {
+            activeConfig = latest
+            engine = AlarmEngine(activeConfig)
+        }
+
         val wake = (getSystemService(POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "skhealth:measurement")
         wake.acquire(12 * 60_000L)
@@ -58,7 +66,7 @@ class MonitorService : Service() {
             val hr = measureHeartRateWithRetry()
             if (hr != null) {
                 process(HealthReading(System.currentTimeMillis(), heartRate = hr))
-                if (hr > config.heartRateHighThreshold) confirmHighHeartRate()
+                if (hr > activeConfig.heartRateHighThreshold) confirmHighHeartRate()
             } else {
                 process(HealthReading(System.currentTimeMillis(), valid = false))
             }
@@ -66,7 +74,7 @@ class MonitorService : Service() {
             val spo2 = measureSpO2WithRetry()
             if (spo2 != null) {
                 process(HealthReading(System.currentTimeMillis(), spo2 = spo2))
-                if (spo2 >= config.spo2CriticalImmediate && spo2 < config.spo2LowThreshold) confirmLowSpO2()
+                if (spo2 >= activeConfig.spo2CriticalImmediate && spo2 < activeConfig.spo2LowThreshold) confirmLowSpO2()
             } else {
                 process(HealthReading(System.currentTimeMillis(), valid = false))
             }
