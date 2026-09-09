@@ -28,7 +28,7 @@ object LocalAlarm {
             putExtra(WearAlarmActivity.EXTRA_REASON, alert.message)
             putExtra(WearAlarmActivity.EXTRA_SPO2, reading?.spo2 ?: -1)
             putExtra(WearAlarmActivity.EXTRA_HR, reading?.heartRate ?: -1)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         val pending = PendingIntent.getActivity(context, 990, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
