@@ -39,6 +39,9 @@ object AppSettings {
     fun escalationMinutes(context: Context): Int = prefs(context).getInt("escalation_minutes", 0)
     fun setEscalationMinutes(context: Context, minutes: Int) = edit(context).putInt("escalation_minutes", minutes.coerceIn(0, 60)).apply()
 
+    fun escalationMaxAgeMinutes(context: Context): Int = prefs(context).getInt("escalation_max_age_minutes", 60)
+    fun setEscalationMaxAgeMinutes(context: Context, minutes: Int) = edit(context).putInt("escalation_max_age_minutes", minutes.coerceIn(5, 1440)).apply()
+
     fun watchMeasurementMinutes(context: Context): Int = prefs(context).getInt("watch_measurement_minutes", 5)
     fun setWatchMeasurementMinutes(context: Context, value: Int) = edit(context).putInt("watch_measurement_minutes", value.coerceIn(1, 60)).apply()
 
