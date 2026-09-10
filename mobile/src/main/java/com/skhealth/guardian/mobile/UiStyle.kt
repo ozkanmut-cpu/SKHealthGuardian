@@ -67,6 +67,26 @@ object UiStyle {
         addView(text(context, label, textSizeSp, textColor, bold).apply { setPadding(dp(context, gapDp), 0, 0, 0) })
     }
 
+    fun iconButton(
+        context: Context,
+        kind: SkIcon,
+        label: String,
+        primary: Boolean = false,
+        iconColor: Int = if (primary) TEXT else BLUE
+    ) = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = dp(context, 54)
+        setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 12))
+        background = rounded(if (primary) 0xFF1677FF.toInt() else SURFACE_2, 18, if (primary) null else 0xFF405064.toInt(), 1, context)
+        isClickable = true
+        isFocusable = true
+        contentDescription = label
+        addView(icon(context, kind, 24, iconColor, null), LinearLayout.LayoutParams(dp(context, 28), dp(context, 28)))
+        addView(text(context, label, 15.5f, TEXT, true).apply { setPadding(dp(context, 10), 0, 0, 0) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        layoutParams = sectionParams(context, 10)
+    }
+
     fun card(context: Context, padding: Int = 18) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(context, padding), dp(context, padding), dp(context, padding), dp(context, padding))
