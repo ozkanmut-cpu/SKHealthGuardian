@@ -31,14 +31,21 @@ class WatchdogService : Service() {
                 val stale = AppSettings.load(this@WatchdogService).staleDataMs
                 val lastAlertedFor = MonitoringState.lastStaleAlertedFor(this@WatchdogService)
                 val disconnectAlertedFor = WatchHeartbeatStore.lastDisconnectAlertedFor(this@WatchdogService)
+                val sensorFailureAlertedFor = TechnicalIncidentStore.sensorFailureAlertedForReading(this@WatchdogService)
 
                 if (WatchdogPolicy.shouldAlert(now, last, stale, lastAlertedFor)) {
                     MonitoringState.markStaleAlertedFor(this@WatchdogService, last)
-                    if (TechnicalConnectivityCoalescingPolicy.suppressDataStale(last, lastHeartbeat, disconnectAlertedFor)) {
+                    if (TechnicalConnectivityCoalescingPolicy.suppressDataStale(
+                            lastReadingMs = last,
+                            lastHeartbeatMs = lastHeartbeat,
+                            disconnectAlertedForHeartbeatMs = disconnectAlertedFor,
+                            sensorFailureAlertedForReadingMs = sensorFailureAlertedFor
+                        )
+                    ) {
                         AlarmTimelineStore.add(
                             this@WatchdogService,
                             "TEKNİK ALARM BİRLEŞTİRİLDİ",
-                            "Veri gelmeme alarmı aynı aktif saat bağlantı kesintisinin devamı olduğu için ikinci SMS/arama gönderilmedi",
+                            "Veri gelmeme alarmı aynı aktif saat/sensör teknik olayının devamı olduğu için ikinci SMS/arama gönderilmedi",
                             now
                         )
                     } else {
@@ -54,11 +61,17 @@ class WatchdogService : Service() {
                 val staleAlertedAfterCheck = MonitoringState.lastStaleAlertedFor(this@WatchdogService)
                 if (WatchConnectionPolicy.shouldAlert(now, lastHeartbeat, heartbeatTimeoutMs, disconnectAlertedFor)) {
                     WatchHeartbeatStore.markDisconnectAlertedFor(this@WatchdogService, lastHeartbeat)
-                    if (TechnicalConnectivityCoalescingPolicy.suppressWatchDisconnected(last, lastHeartbeat, staleAlertedAfterCheck)) {
+                    if (TechnicalConnectivityCoalescingPolicy.suppressWatchDisconnected(
+                            lastReadingMs = last,
+                            lastHeartbeatMs = lastHeartbeat,
+                            staleAlertedForReadingMs = staleAlertedAfterCheck,
+                            sensorFailureAlertedForReadingMs = sensorFailureAlertedFor
+                        )
+                    ) {
                         AlarmTimelineStore.add(
                             this@WatchdogService,
                             "TEKNİK ALARM BİRLEŞTİRİLDİ",
-                            "Saat bağlantı kesilmesi aynı aktif veri gelmeme olayının devamı olduğu için ikinci SMS/arama gönderilmedi",
+                            "Saat bağlantı kesilmesi aynı aktif veri/sensör teknik olayının devamı olduğu için ikinci SMS/arama gönderilmedi",
                             now
                         )
                     } else {
