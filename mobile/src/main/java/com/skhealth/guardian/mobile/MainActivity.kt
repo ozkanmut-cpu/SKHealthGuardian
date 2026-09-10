@@ -7,11 +7,15 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,7 +58,7 @@ class MainActivity : Activity() {
 
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(6), dp(18), dp(20))
+            setPadding(dp(18), dp(2), dp(18), dp(20))
         }
         page.addView(
             ScrollView(this).apply {
@@ -96,19 +100,29 @@ class MainActivity : Activity() {
             else -> Severity.NORMAL
         }
 
+        addQuickMeasureButton()
         addStatusCard(severity, age, sourceTs)
         addDeviceCards(watchConnected, pcConnected, pc60, now)
         addMetricCards(spo2, hr, cfg.spo2LowThreshold, cfg.heartRateHighThreshold)
         addRecentMeasurements(latestValid)
         addEmergencyContactsCard()
-        addQuickMeasureButton()
         page.addView(UiStyle.appBottomNavigation(this, "home"))
     }
 
     private fun header(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(20), dp(18), dp(14), dp(12))
+        setPadding(dp(20), dp(18), dp(20), dp(12))
+        applyStatusBarInset(this)
+
+        addView(
+            ImageView(this@MainActivity).apply {
+                setImageResource(R.mipmap.ic_launcher)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = "SK Health Guardian"
+            },
+            LinearLayout.LayoutParams(dp(50), dp(50)).apply { rightMargin = dp(12) }
+        )
 
         val labels = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(UiStyle.text(this@MainActivity, "SK Health Guardian", 27f, UiStyle.TEXT, true))
@@ -118,15 +132,19 @@ class MainActivity : Activity() {
             }
         )
         addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+    }
 
-        val settings = UiStyle.icon(this@MainActivity, SkIcon.SETTINGS, 25, UiStyle.TEXT, "Ayarlar").apply {
-            background = UiStyle.rounded(UiStyle.SURFACE, 16, context = this@MainActivity)
-            isClickable = true
-            isFocusable = true
-            setPadding(dp(11), dp(11), dp(11), dp(11))
-            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsHubActivity::class.java)) }
+    private fun applyStatusBarInset(view: View) {
+        val left = dp(20)
+        val top = dp(18)
+        val right = dp(20)
+        val bottom = dp(12)
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            v.setPadding(left, top + statusTop, right, bottom)
+            insets
         }
-        addView(settings, LinearLayout.LayoutParams(dp(48), dp(48)))
+        ViewCompat.requestApplyInsets(view)
     }
 
     private fun addStatusCard(severity: Severity, age: Long, sourceTs: Long) {
@@ -186,7 +204,7 @@ class MainActivity : Activity() {
         if (age != Long.MAX_VALUE) {
             card.addView(UiStyle.text(this, ageText(age), 12f, UiStyle.MUTED).apply { setPadding(dp(48), dp(8), 0, 0) })
         }
-        root.addView(card)
+        root.addView(card, UiStyle.sectionParams(this, 12))
     }
 
     private fun addDeviceCards(watchConnected: Boolean, pcConnected: Boolean, pc60: Pc60Status, now: Long) {
@@ -394,7 +412,7 @@ class MainActivity : Activity() {
                 setPadding(0, dp(5), 0, 0)
             }
         )
-        root.addView(button, UiStyle.sectionParams(this, 16))
+        root.addView(button, UiStyle.sectionParams(this, 8))
     }
 
     private fun spo2Label(value: Int, low: Int) = when {
