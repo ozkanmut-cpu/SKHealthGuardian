@@ -46,23 +46,37 @@ class WearAlarmActivity : Activity() {
         }
 
         val banner = card(Color.rgb(58,23,26)).apply { gravity = Gravity.CENTER_HORIZONTAL }
-        banner.addView(label("⚠  SAĞLIK ALARMI", if(compact) 15f else 17f, red, true).apply { gravity = Gravity.CENTER })
+        val alertHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(icon(WearIcon.ALERT, red, if(compact) 20 else 23), LinearLayout.LayoutParams(dp(if(compact) 28 else 32), dp(if(compact) 28 else 32)))
+            addView(label("SAĞLIK ALARMI", if(compact) 15f else 17f, red, true).apply { setPadding(dp(6),0,0,0) })
+        }
+        banner.addView(alertHeader)
         banner.addView(label(reason, if(compact) 18f else 21f, text, true).apply { gravity = Gravity.CENTER; setPadding(0,dp(8),0,0) })
         root.addView(banner)
 
         val metrics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 2f }
-        metrics.addView(metricCard("SpO₂", if(spo2 >= 0) "$spo2%" else "—", red), LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { marginEnd=dp(4) })
-        metrics.addView(metricCard("Nabız", if(hr >= 0) hr.toString() else "—", if(hr >= 0) amber else muted, "bpm"), LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { marginStart=dp(4) })
+        metrics.addView(metricCard(WearIcon.SPO2,"SpO₂", if(spo2 >= 0) "$spo2%" else "—", red), LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { marginEnd=dp(4) })
+        metrics.addView(metricCard(WearIcon.HEART,"Nabız", if(hr >= 0) hr.toString() else "—", if(hr >= 0) amber else muted, "bpm"), LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { marginStart=dp(4) })
         root.addView(metrics, sectionParams(6))
 
         root.addView(card().apply {
-            addView(label("Kaynak",11f,muted))
-            addView(label("Galaxy Watch",14f,text,true).apply { setPadding(0,dp(3),0,0) })
+            val sourceRow = LinearLayout(this@WearAlarmActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(icon(WearIcon.WATCH, blue, 18), LinearLayout.LayoutParams(dp(26),dp(26)))
+                val labels = LinearLayout(this@WearAlarmActivity).apply { orientation = LinearLayout.VERTICAL }
+                labels.addView(label("Kaynak",11f,muted))
+                labels.addView(label("Galaxy Watch",14f,text,true).apply { setPadding(0,dp(2),0,0) })
+                addView(labels)
+            }
+            addView(sourceRow)
             addView(label("Alarm doğrulandı. Ölçümü kontrol et. Belirgin kötüleşmede acil yardım al.",12f,text).apply { setPadding(0,dp(8),0,0) })
             addView(label("Telefona da iletilmeye çalışılıyor.",11f,muted).apply { setPadding(0,dp(7),0,0) })
         }, sectionParams(6))
 
-        root.addView(action("🔕","Alarmı sustur",red) {
+        root.addView(action(WearIcon.BELL_OFF,"Alarmı sustur",red) {
             val bridge = PhoneBridge(this)
             val queued = if (AlertIdentity.isValid(alertId)) {
                 bridge.sendAlarmAcknowledgement(alertId!!, alertTs, reason)
@@ -78,11 +92,11 @@ class WearAlarmActivity : Activity() {
             finish()
         }, sectionParams(8))
 
-        root.addView(action("↻","Tekrar ölç",blue) {
+        root.addView(action(WearIcon.REFRESH,"Tekrar ölç",blue) {
             runCatching { ContextCompat.startForegroundService(this, Intent(this, MonitorService::class.java).setAction(MonitorService.ACTION_MEASURE_NOW)) }
         }, sectionParams(6))
 
-        root.addView(action("⌂","Ana ekrana dön",muted) {
+        root.addView(action(WearIcon.HOME,"Ana ekrana dön",muted) {
             startActivity(Intent(this, WatchSetupActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             finish()
         }, sectionParams(6))
@@ -90,18 +104,20 @@ class WearAlarmActivity : Activity() {
         setContentView(ScrollView(this).apply { isFillViewport=true; isVerticalScrollBarEnabled=false; setBackgroundColor(bg); addView(root) })
     }
 
-    private fun metricCard(title:String,value:String,color:Int,unit:String="") = card(surface2).apply {
+    private fun metricCard(metricIcon:WearIcon,title:String,value:String,color:Int,unit:String="") = card(surface2).apply {
         gravity=Gravity.CENTER
-        addView(label(title,11f,muted).apply{gravity=Gravity.CENTER})
+        addView(icon(metricIcon,color,16),LinearLayout.LayoutParams(dp(24),dp(24)).apply{gravity=Gravity.CENTER_HORIZONTAL})
+        addView(label(title,11f,muted).apply{gravity=Gravity.CENTER;setPadding(0,dp(2),0,0)})
         addView(label(value,if(resources.configuration.screenWidthDp<220)27f else 31f,color,true).apply{gravity=Gravity.CENTER;setPadding(0,dp(3),0,0)})
         if(unit.isNotBlank()) addView(label(unit,10f,muted).apply{gravity=Gravity.CENTER})
     }
-    private fun action(icon:String,title:String,accent:Int,block:()->Unit)=card(surface2).apply {
+    private fun action(actionIcon:WearIcon,title:String,accent:Int,block:()->Unit)=card(surface2).apply {
         orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(52);isClickable=true;isFocusable=true;setOnClickListener{block()}
-        addView(label(icon,19f,accent,true),LinearLayout.LayoutParams(dp(34),ViewGroup.LayoutParams.WRAP_CONTENT))
-        addView(label(title,14f,text,true),LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f))
-        addView(label("›",20f,muted))
+        addView(icon(actionIcon,accent,19),LinearLayout.LayoutParams(dp(34),dp(34)))
+        addView(label(title,14f,text,true),LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply{marginStart=dp(4)})
+        addView(icon(WearIcon.CHEVRON_RIGHT,muted,17),LinearLayout.LayoutParams(dp(24),dp(24)))
     }
+    private fun icon(icon:WearIcon,color:Int,size:Int)=WearIconView(this,icon,color).apply{contentDescription=icon.name;minimumWidth=dp(size);minimumHeight=dp(size)}
     private fun card(color:Int=surface)=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(11),dp(9),dp(11),dp(9));background=rounded(color,18f) }
     private fun label(value:String,size:Float,color:Int,bold:Boolean=false)=TextView(this).apply{text=value;textSize=size;setTextColor(color);if(bold)setTypeface(typeface,Typeface.BOLD)}
     private fun sectionParams(top:Int)=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply{topMargin=dp(top)}
