@@ -9,12 +9,15 @@ object AlertAcknowledgementStore {
     private const val KEY_ACK_IDS = "ack_ids"
     private const val MAX_ACK_IDS = 256
 
-    /** Exact-ID acknowledgement used by current alarm/escalation flow. */
-    fun acknowledge(context: Context, alertId: String) {
-        if (!AlertIdentity.isValid(alertId)) return
+    /**
+     * Exact-ID acknowledgement used by the current alarm/escalation flow.
+     * Returns true only after the acknowledgement is durably committed.
+     */
+    fun acknowledge(context: Context, alertId: String): Boolean {
+        if (!AlertIdentity.isValid(alertId)) return false
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         val protected = EscalationScheduler.pendingExactAlertIds(context)
-        BoundedIdStore.add(prefs, KEY_ACK_IDS, alertId, MAX_ACK_IDS, protected)
+        return BoundedIdStore.add(prefs, KEY_ACK_IDS, alertId, MAX_ACK_IDS, protected)
     }
 
     fun isAcknowledged(context: Context, alertId: String): Boolean {
@@ -25,17 +28,18 @@ object AlertAcknowledgementStore {
 
     /**
      * Legacy timestamp watermark kept for backward compatibility with already-scheduled alarms
-     * and older Wear payloads during migration.
+     * and older Wear payloads during migration. Returns true only when the watermark is already
+     * at/after the requested timestamp or the new value is durably committed.
      */
-    fun acknowledge(context: Context, alertTimestampMs: Long = System.currentTimeMillis()) {
+    fun acknowledge(context: Context, alertTimestampMs: Long = System.currentTimeMillis()): Boolean {
+        if (alertTimestampMs <= 0L) return false
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         synchronized(this) {
             val current = prefs.getLong(KEY_LAST_ACK, 0L)
-            if (alertTimestampMs > current) {
-                // ACK is a safety boundary: persist it before returning so a process death cannot
-                // resurrect an already-silenced legacy escalation.
-                prefs.edit().putLong(KEY_LAST_ACK, alertTimestampMs).commit()
-            }
+            if (alertTimestampMs <= current) return true
+            // ACK is a safety boundary: persist it before returning so a process death cannot
+            // resurrect an already-silenced legacy escalation.
+            return prefs.edit().putLong(KEY_LAST_ACK, alertTimestampMs).commit()
         }
     }
 
