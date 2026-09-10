@@ -30,6 +30,7 @@ class MonitorService : Service() {
     private var serviceStartedAt = 0L
     private var lastSensorFailureAlertAt = 0L
     @Volatile private var inMemoryTechnicalAlertRetry: AlertEvent? = null
+    @Volatile private var engineStateDirty = false
 
     override fun onCreate() {
         super.onCreate()
@@ -56,11 +57,21 @@ class MonitorService : Service() {
     private fun startHeartbeat() {
         scope.launch {
             while (isActive) {
+                retryEngineStatePersistence()
                 retryInMemoryTechnicalAlert()
                 runCatching { bridge.sendHeartbeat(batteryPct()) }
                 delay(60_000L)
             }
         }
+    }
+
+    private fun persistEngineState() {
+        engineStateDirty = !WearAlarmEngineStateStore.save(this, engineSignature, engine.snapshot())
+    }
+
+    private fun retryEngineStatePersistence() {
+        if (!engineStateDirty) return
+        persistEngineState()
     }
 
     private suspend fun retryInMemoryTechnicalAlert() {
@@ -110,9 +121,6 @@ class MonitorService : Service() {
                         LocalAlarm.raise(this@MonitorService, alert)
                         val deliveredOrQueued = runCatching { bridge.sendAlert(alert) }.getOrDefault(false)
                         if (!deliveredOrQueued) {
-                            // SharedPreferences commit itself failed. The local alarm remains active;
-                            // keep the exact same event in memory and retry on every heartbeat while
-                            // this service process is alive instead of silently dropping remote alerting.
                             inMemoryTechnicalAlertRetry = alert
                         }
                     }
@@ -129,7 +137,7 @@ class MonitorService : Service() {
             activeConfig = latest
             engineSignature = WearAlarmEngineStateStore.signature(activeConfig)
             engine = AlarmEngine(activeConfig)
-            WearAlarmEngineStateStore.save(this, engineSignature, engine.snapshot())
+            persistEngineState()
         }
 
         val wake = (getSystemService(POWER_SERVICE) as PowerManager)
@@ -219,7 +227,7 @@ class MonitorService : Service() {
         }
         runCatching { bridge.send(reading) }
         val alerts = engine.evaluate(reading)
-        WearAlarmEngineStateStore.save(this, engineSignature, engine.snapshot())
+        persistEngineState()
         if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
     }
 
