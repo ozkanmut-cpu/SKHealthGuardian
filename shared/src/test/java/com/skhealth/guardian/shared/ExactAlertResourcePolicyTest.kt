@@ -2,6 +2,7 @@ package com.skhealth.guardian.shared
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -38,5 +39,14 @@ class ExactAlertResourcePolicyTest {
             newAlarmOnly,
             ExactAlertResourcePolicy.remainingAfterAcknowledgement(newAlarmOnly, alertA)
         )
+    }
+
+    @Test
+    fun invalidOrTimestampIdentityCannotOwnExactNotification() {
+        assertNull(ExactAlertResourcePolicy.notificationTag("bad-id"))
+        assertNull(ExactAlertResourcePolicy.notificationTag("SPO2_CRITICAL:ts:1700000000000"))
+        assertNull(ExactAlertResourcePolicy.notificationTag("SPO2_CRITICAL:event:"))
+        assertFalse(AlertIdentity.isExact("WATCH_DISCONNECTED:ts:1700000000000"))
+        assertTrue(AlertIdentity.isExact("WATCH_DISCONNECTED:event:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
     }
 }
