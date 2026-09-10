@@ -110,7 +110,7 @@ object UiStyle {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(context, 20), dp(context, 18), dp(context, 20), dp(context, 32))
         setBackgroundColor(BG)
-        applyBottomInset(this, 8)
+        applyPageInsets(this, 8)
     }
 
     fun title(context: Context, value: String) = text(context, value, 27f, TEXT, true).apply {
@@ -229,11 +229,24 @@ object UiStyle {
     fun applyBars(activity: Activity) {
         activity.window.statusBarColor = BG
         activity.window.navigationBarColor = BG
-        WindowCompat.setDecorFitsSystemWindows(activity.window, true)
+        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
         WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
+    }
+
+    private fun applyPageInsets(view: View, extraBottomDp: Int = 0) {
+        val l = view.paddingLeft
+        val t = view.paddingTop
+        val r = view.paddingRight
+        val b = view.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(l, t + bars.top, r, b + bars.bottom + dp(v.context, extraBottomDp))
+            insets
+        }
+        ViewCompat.requestApplyInsets(view)
     }
 
     fun applyBottomInset(view: View, extraDp: Int = 0) {
