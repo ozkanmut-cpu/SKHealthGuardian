@@ -10,6 +10,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import com.skhealth.guardian.shared.AlertIdentity
 
 class AlarmActivity : Activity() {
@@ -64,14 +65,25 @@ class AlarmActivity : Activity() {
         root.addView(info, UiStyle.sectionParams(this))
 
         root.addView(action("🔕", "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
-            getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
-            WatchCommandSender(this@AlarmActivity).silenceAlarm()
-            if (AlertIdentity.isValid(alertId)) {
+            val ackPersisted = if (AlertIdentity.isValid(alertId)) {
                 AlertAcknowledgementStore.acknowledge(this@AlarmActivity, alertId!!)
-                EscalationScheduler.cancel(this@AlarmActivity, alertId, alertTs)
             } else {
                 val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
                 AlertAcknowledgementStore.acknowledge(this@AlarmActivity, acknowledgedTs)
+            }
+
+            if (!ackPersisted) {
+                AlarmTimelineStore.add(this@AlarmActivity, "ACK KAYIT HATASI", "Alarm susturma kalıcı olarak kaydedilemedi; alarm ve escalation aktif tutuldu")
+                Toast.makeText(this@AlarmActivity, "Alarm susturma kaydedilemedi. Lütfen tekrar deneyin.", Toast.LENGTH_LONG).show()
+                return@action
+            }
+
+            getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
+            WatchCommandSender(this@AlarmActivity).silenceAlarm()
+            if (AlertIdentity.isValid(alertId)) {
+                EscalationScheduler.cancel(this@AlarmActivity, alertId!!, alertTs)
+            } else {
+                val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
                 EscalationScheduler.cancel(this@AlarmActivity, acknowledgedTs)
             }
             AlarmTimelineStore.add(this@AlarmActivity, "ALARM SUSTURULDU", reason)
