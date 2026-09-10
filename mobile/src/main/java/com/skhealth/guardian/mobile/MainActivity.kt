@@ -112,23 +112,32 @@ class MainActivity : Activity() {
     private fun header(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(20), dp(18), dp(20), dp(12))
+        setPadding(dp(20), dp(12), dp(20), dp(10))
         applyStatusBarInset(this)
 
-        addView(
-            ImageView(this@MainActivity).apply {
-                setImageResource(R.mipmap.ic_launcher)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                contentDescription = "SK Health Guardian"
-            },
-            LinearLayout.LayoutParams(dp(50), dp(50)).apply { rightMargin = dp(12) }
-        )
+        val brandBadge = LinearLayout(this@MainActivity).apply {
+            gravity = Gravity.CENTER
+            background = UiStyle.rounded(UiStyle.SURFACE, 13, 0xFF2B3642.toInt(), 1, this@MainActivity)
+            addView(
+                ImageView(this@MainActivity).apply {
+                    setImageResource(R.mipmap.ic_launcher)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    contentDescription = "SK Health Guardian"
+                    setPadding(dp(4), dp(4), dp(4), dp(4))
+                },
+                LinearLayout.LayoutParams(dp(36), dp(36))
+            )
+        }
+        addView(brandBadge, LinearLayout.LayoutParams(dp(44), dp(44)).apply { rightMargin = dp(12) })
 
-        val labels = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
-        labels.addView(UiStyle.text(this@MainActivity, "SK Health Guardian", 27f, UiStyle.TEXT, true))
+        val labels = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        labels.addView(UiStyle.text(this@MainActivity, "SK Health Guardian", 22.5f, UiStyle.TEXT, true))
         labels.addView(
-            UiStyle.text(this@MainActivity, "Sağlık izleme ve alarm merkezi", 14f, UiStyle.MUTED).apply {
-                setPadding(0, dp(5), 0, 0)
+            UiStyle.text(this@MainActivity, "Sağlık izleme ve alarm merkezi", 12.5f, UiStyle.MUTED).apply {
+                setPadding(0, dp(4), 0, 0)
             }
         )
         addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -136,9 +145,9 @@ class MainActivity : Activity() {
 
     private fun applyStatusBarInset(view: View) {
         val left = dp(20)
-        val top = dp(18)
+        val top = dp(12)
         val right = dp(20)
-        val bottom = dp(12)
+        val bottom = dp(10)
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
             val statusTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             v.setPadding(left, top + statusTop, right, bottom)
