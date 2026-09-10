@@ -73,7 +73,7 @@ class WatchSetupActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        stateIcon = wearIcon(WearIcon.WATCH, amber, 22)
+        stateIcon = wearIcon(WearIcon.REFRESH, amber, 22)
         statusRow.addView(stateIcon, LinearLayout.LayoutParams(dp(26), dp(26)))
         stateText = label("", if (compact) 17f else 19f, amber, true).apply { setPadding(dp(7), 0, 0, 0) }
         statusRow.addView(stateText)
@@ -167,7 +167,7 @@ class WatchSetupActivity : Activity() {
         val fresh = age != Long.MAX_VALUE && age <= 15 * 60_000L
         stateText.text = if (fresh) "İzleme aktif" else "Veri bekleniyor"
         stateText.setTextColor(if (fresh) green else amber)
-        stateIcon.icon = if (fresh) WearIcon.WATCH else WearIcon.REFRESH
+        stateIcon.icon = if (fresh) WearIcon.STATUS_OK else WearIcon.REFRESH
         stateIcon.tint = if (fresh) green else amber
         stateIcon.invalidate()
         spo2Value.text = status.spo2?.toString() ?: "—"
