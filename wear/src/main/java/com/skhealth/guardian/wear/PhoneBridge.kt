@@ -66,20 +66,19 @@ class PhoneBridge(private val context: Context) {
         }
     }
 
-    fun sendAlarmAcknowledgement(alertId: String, alertTimestampMs: Long, reason: String) {
+    fun sendAlarmAcknowledgement(alertId: String, alertTimestampMs: Long, reason: String): Boolean {
         val safeReason = sanitizeReason(reason)
-        val seq = nextAckSequence()
-        sendAckPayload("v2|$seq|$alertId|$alertTimestampMs|$safeReason")
+        val seq = nextAckSequence() ?: return false
+        return sendAckPayload("v2|$seq|$alertId|$alertTimestampMs|$safeReason")
     }
 
-    fun sendAlarmAcknowledgement(alertTimestampMs: Long, reason: String) {
+    fun sendAlarmAcknowledgement(alertTimestampMs: Long, reason: String): Boolean =
         sendAckPayload("$alertTimestampMs|${sanitizeReason(reason)}")
-    }
 
-    private fun sendAckPayload(payload: String) {
-        // Persist before transport. Message delivery only proves transport success; the queue is
-        // cleared exclusively by /health/alarm_ack_result after the phone durably commits the ACK.
-        savePendingAck(payload)
+    private fun sendAckPayload(payload: String): Boolean {
+        // Durably persist before any remote side effect. If this fails the Watch keeps the local
+        // alarm active and does not tell the phone to cancel escalation; the user can retry.
+        if (!savePendingAck(payload)) return false
         Wearable.getNodeClient(context).connectedNodes
             .addOnSuccessListener { nodes ->
                 if (nodes.isEmpty()) return@addOnSuccessListener
@@ -88,6 +87,7 @@ class PhoneBridge(private val context: Context) {
                         .sendMessage(node.id, "/health/alarm_ack", payload.toByteArray())
                 }
             }
+        return true
     }
 
     fun confirmAlarmAcknowledgement(receiptPayload: String) {
@@ -167,9 +167,9 @@ class PhoneBridge(private val context: Context) {
     }
 
     @Synchronized
-    private fun savePendingAck(payload: String) {
+    private fun savePendingAck(payload: String): Boolean {
         val current = prefs.getString(KEY_PENDING_ACK, null)
-        prefs.edit().putString(KEY_PENDING_ACK, PendingAckPolicy.newest(current, payload)).commit()
+        return prefs.edit().putString(KEY_PENDING_ACK, PendingAckPolicy.newest(current, payload)).commit()
     }
 
     @Synchronized
@@ -181,11 +181,10 @@ class PhoneBridge(private val context: Context) {
     }
 
     @Synchronized
-    private fun nextAckSequence(): Long {
+    private fun nextAckSequence(): Long? {
         val current = prefs.getLong(KEY_ACK_SEQUENCE, 0L)
         val next = if (current == Long.MAX_VALUE) 1L else current + 1L
-        prefs.edit().putLong(KEY_ACK_SEQUENCE, next).commit()
-        return next
+        return if (prefs.edit().putLong(KEY_ACK_SEQUENCE, next).commit()) next else null
     }
 
     private fun sanitizeReason(reason: String): String =
