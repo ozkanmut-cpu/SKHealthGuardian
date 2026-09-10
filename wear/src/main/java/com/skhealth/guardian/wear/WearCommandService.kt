@@ -30,6 +30,10 @@ class WearCommandService : WearableListenerService() {
                 }
             }
             "/health/silence" -> LocalAlarm.cancel(this)
+            "/health/alarm_ack_result" -> {
+                val order = String(event.data).toLongOrNull() ?: return
+                PhoneBridge(this).confirmAlarmAcknowledgement(order)
+            }
         }
     }
 
