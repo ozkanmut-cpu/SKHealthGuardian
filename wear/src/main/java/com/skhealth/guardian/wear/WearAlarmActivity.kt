@@ -13,6 +13,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.skhealth.guardian.shared.AlertIdentity
 
@@ -62,10 +63,18 @@ class WearAlarmActivity : Activity() {
         }, sectionParams(6))
 
         root.addView(action("🔕","Alarmı sustur",red) {
+            val bridge = PhoneBridge(this)
+            val queued = if (AlertIdentity.isValid(alertId)) {
+                bridge.sendAlarmAcknowledgement(alertId!!, alertTs, reason)
+            } else {
+                bridge.sendAlarmAcknowledgement(alertTs, reason)
+            }
+            if (!queued) {
+                Toast.makeText(this, "Susturma kaydedilemedi. Alarm aktif; tekrar deneyin.", Toast.LENGTH_LONG).show()
+                return@action
+            }
             LocalAlarm.cancel(this)
             getSystemService(NotificationManager::class.java).cancel(LocalAlarm.NOTIFICATION_ID)
-            if (AlertIdentity.isValid(alertId)) PhoneBridge(this).sendAlarmAcknowledgement(alertId!!, alertTs, reason)
-            else PhoneBridge(this).sendAlarmAcknowledgement(alertTs, reason)
             finish()
         }, sectionParams(8))
 
