@@ -2,6 +2,7 @@ package com.skhealth.guardian.wear
 
 import android.content.Context
 import com.google.android.gms.wearable.Wearable
+import com.skhealth.guardian.shared.AckReceiptPolicy
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.PendingAckPolicy
@@ -89,9 +90,9 @@ class PhoneBridge(private val context: Context) {
             }
     }
 
-    fun confirmAlarmAcknowledgement(receiptOrder: Long) {
-        if (receiptOrder <= 0L) return
-        clearPendingAckIfNotNewerThan(receiptOrder)
+    fun confirmAlarmAcknowledgement(receiptPayload: String) {
+        if (receiptPayload.isBlank()) return
+        clearPendingAckIfMatches(receiptPayload)
     }
 
     private suspend fun flushQueuedReadings(nodeIds: List<String>) {
@@ -128,7 +129,7 @@ class PhoneBridge(private val context: Context) {
         nodeIds.forEach { id ->
             runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }
         }
-        // Deliberately retain until a durable receipt arrives from the phone.
+        // Deliberately retain until a durable receipt for this exact ACK arrives from the phone.
     }
 
     private fun encode(reading: HealthReading): String = listOf(
@@ -172,9 +173,11 @@ class PhoneBridge(private val context: Context) {
     }
 
     @Synchronized
-    private fun clearPendingAckIfNotNewerThan(receiptOrder: Long) {
+    private fun clearPendingAckIfMatches(receiptPayload: String) {
         val current = prefs.getString(KEY_PENDING_ACK, null) ?: return
-        if (PendingAckPolicy.order(current) <= receiptOrder) prefs.edit().remove(KEY_PENDING_ACK).commit()
+        if (AckReceiptPolicy.matchesPending(current, receiptPayload)) {
+            prefs.edit().remove(KEY_PENDING_ACK).commit()
+        }
     }
 
     @Synchronized
