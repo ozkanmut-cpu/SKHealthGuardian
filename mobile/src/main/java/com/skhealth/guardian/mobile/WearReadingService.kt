@@ -42,8 +42,6 @@ class WearReadingService : WearableListenerService() {
                 val reason = p.getOrNull(4).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
                 if (!AlertIdentity.isValid(alertId)) return
 
-                // Receipt may have been lost after the phone already durably persisted this ACK.
-                // In that case only resend the receipt; do not repeat cancel/timeline side effects.
                 if (AlertAcknowledgementStore.isAcknowledged(this, alertId)) {
                     sendAckReceipt(event.sourceNodeId, receiptPayload)
                     return
@@ -56,7 +54,7 @@ class WearReadingService : WearableListenerService() {
                 }
                 sendAckReceipt(event.sourceNodeId, receiptPayload)
                 EscalationScheduler.cancel(this, alertId, alertTs)
-                getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
+                getSystemService(NotificationManager::class.java).cancel(alertId, AlarmActivity.CRITICAL_NOTIFICATION_ID)
                 AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, if (alertTs > 0L) alertTs else System.currentTimeMillis())
                 return
             }
@@ -65,8 +63,6 @@ class WearReadingService : WearableListenerService() {
             val alertTs = p.getOrNull(0)?.toLongOrNull() ?: return
             val reason = p.getOrNull(1).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
 
-            // Legacy ACKs use a monotonic timestamp watermark. A repeated/older ACK only needs
-            // another receipt; cancellation and timeline side effects were already completed.
             if (AlertAcknowledgementStore.lastAcknowledgedAt(this) >= alertTs) {
                 sendAckReceipt(event.sourceNodeId, receiptPayload)
                 return
