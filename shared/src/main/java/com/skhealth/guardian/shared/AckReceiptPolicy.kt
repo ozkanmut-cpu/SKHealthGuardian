@@ -13,7 +13,7 @@ object AckReceiptPolicy {
             val seq = parts[1].toLongOrNull() ?: return null
             val alertId = parts[2]
             val alertTimestampMs = parts[3].toLongOrNull() ?: return null
-            if (seq <= 0L || alertTimestampMs <= 0L || !isExactAlertId(alertId)) return null
+            if (seq <= 0L || alertTimestampMs <= 0L || !AlertIdentity.isExact(alertId)) return null
             "v2|$seq|$alertId"
         } else {
             val timestamp = parts.firstOrNull()?.toLongOrNull() ?: return null
@@ -25,12 +25,5 @@ object AckReceiptPolicy {
     fun matchesPending(pendingAckPayload: String?, receiptPayload: String): Boolean {
         if (pendingAckPayload.isNullOrBlank() || receiptPayload.isBlank()) return false
         return receiptForAck(pendingAckPayload) == receiptPayload
-    }
-
-    private fun isExactAlertId(alertId: String): Boolean {
-        if (!AlertIdentity.isValid(alertId)) return false
-        val typeName = alertId.substringBefore(':', missingDelimiterValue = "")
-        if (typeName.isBlank()) return false
-        return AlertType.entries.any { it.name == typeName }
     }
 }
