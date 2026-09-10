@@ -7,6 +7,12 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Stress/chaos tests are intentionally expensive. Only the newest run for the same
+# branch/ref needs to finish; an older commit is fully contained in a newer main push.
+concurrency:
+  group: android-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
