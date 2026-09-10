@@ -65,7 +65,8 @@ class AlarmActivity : Activity() {
         root.addView(info, UiStyle.sectionParams(this))
 
         root.addView(action("🔕", "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
-            val ackPersisted = if (AlertIdentity.isValid(alertId)) {
+            val exact = AlertIdentity.isValid(alertId)
+            val ackPersisted = if (exact) {
                 AlertAcknowledgementStore.acknowledge(this@AlarmActivity, alertId!!)
             } else {
                 val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
@@ -78,9 +79,15 @@ class AlarmActivity : Activity() {
                 return@action
             }
 
-            getSystemService(NotificationManager::class.java).cancel(CRITICAL_NOTIFICATION_ID)
+            val nm = getSystemService(NotificationManager::class.java)
+            if (exact) {
+                nm.cancel(alertId!!, CRITICAL_NOTIFICATION_ID)
+            } else {
+                // Migration fallback for old untagged notifications.
+                nm.cancel(CRITICAL_NOTIFICATION_ID)
+            }
             WatchCommandSender(this@AlarmActivity).silenceAlarm()
-            if (AlertIdentity.isValid(alertId)) {
+            if (exact) {
                 EscalationScheduler.cancel(this@AlarmActivity, alertId!!, alertTs)
             } else {
                 val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
