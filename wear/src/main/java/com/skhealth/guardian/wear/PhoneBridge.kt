@@ -76,27 +76,22 @@ class PhoneBridge(private val context: Context) {
     }
 
     private fun sendAckPayload(payload: String) {
-        val order = PendingAckPolicy.order(payload)
+        // Persist before transport. Message delivery only proves transport success; the queue is
+        // cleared exclusively by /health/alarm_ack_result after the phone durably commits the ACK.
+        savePendingAck(payload)
         Wearable.getNodeClient(context).connectedNodes
             .addOnSuccessListener { nodes ->
-                if (nodes.isEmpty()) {
-                    savePendingAck(payload)
-                    return@addOnSuccessListener
-                }
-                var remaining = nodes.size
-                var allOk = true
+                if (nodes.isEmpty()) return@addOnSuccessListener
                 nodes.forEach { node ->
-                    Wearable.getMessageClient(context).sendMessage(node.id, "/health/alarm_ack", payload.toByteArray())
-                        .addOnFailureListener { allOk = false }
-                        .addOnCompleteListener {
-                            remaining--
-                            if (remaining == 0) {
-                                if (allOk) clearPendingAckIfNotNewerThan(order) else savePendingAck(payload)
-                            }
-                        }
+                    Wearable.getMessageClient(context)
+                        .sendMessage(node.id, "/health/alarm_ack", payload.toByteArray())
                 }
             }
-            .addOnFailureListener { savePendingAck(payload) }
+    }
+
+    fun confirmAlarmAcknowledgement(receiptOrder: Long) {
+        if (receiptOrder <= 0L) return
+        clearPendingAckIfNotNewerThan(receiptOrder)
     }
 
     private suspend fun flushQueuedReadings(nodeIds: List<String>) {
@@ -130,10 +125,10 @@ class PhoneBridge(private val context: Context) {
     private suspend fun flushAlarmAcknowledgement(nodeIds: List<String>) {
         val payload = synchronized(this) { prefs.getString(KEY_PENDING_ACK, null) } ?: return
         val bytes = payload.toByteArray()
-        val ok = nodeIds.all { id ->
-            runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }.isSuccess
+        nodeIds.forEach { id ->
+            runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }
         }
-        if (ok) clearPendingAckIfNotNewerThan(PendingAckPolicy.order(payload))
+        // Deliberately retain until a durable receipt arrives from the phone.
     }
 
     private fun encode(reading: HealthReading): String = listOf(
@@ -173,13 +168,13 @@ class PhoneBridge(private val context: Context) {
     @Synchronized
     private fun savePendingAck(payload: String) {
         val current = prefs.getString(KEY_PENDING_ACK, null)
-        prefs.edit().putString(KEY_PENDING_ACK, PendingAckPolicy.newest(current, payload)).apply()
+        prefs.edit().putString(KEY_PENDING_ACK, PendingAckPolicy.newest(current, payload)).commit()
     }
 
     @Synchronized
-    private fun clearPendingAckIfNotNewerThan(sentOrder: Long) {
+    private fun clearPendingAckIfNotNewerThan(receiptOrder: Long) {
         val current = prefs.getString(KEY_PENDING_ACK, null) ?: return
-        if (PendingAckPolicy.order(current) <= sentOrder) prefs.edit().remove(KEY_PENDING_ACK).apply()
+        if (PendingAckPolicy.order(current) <= receiptOrder) prefs.edit().remove(KEY_PENDING_ACK).commit()
     }
 
     @Synchronized
