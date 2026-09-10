@@ -117,7 +117,7 @@ class AlertDispatcher(private val context: Context) {
         }
 
         if (!acknowledgedDuringDispatch) {
-            localNotification(alarmIntent, alert)
+            localNotification(alarmIntent, alertId, alert)
             if (!AlertAcknowledgementStore.isAcknowledged(context, alertId)) {
                 scheduleEscalation(alertId, alert)
             }
@@ -135,11 +135,14 @@ class AlertDispatcher(private val context: Context) {
         AlarmTimelineStore.add(context, "ESCALATION PLANLANDI", "$minutes dk içinde alarm susturulmazsa tekrar iletişim kurulacak")
     }
 
-    private fun localNotification(alarmIntent: Intent, alert: AlertEvent) {
+    private fun localNotification(alarmIntent: Intent, alertId: String, alert: AlertEvent) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(context, 0, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        // Android supports (tag, id) notification identity. Using the exact alarm ID as the tag
+        // avoids hash collisions and prevents one simultaneous alarm from overwriting another.
         nm.notify(
+            alertId,
             AlarmActivity.CRITICAL_NOTIFICATION_ID,
             NotificationCompat.Builder(context, "critical")
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
