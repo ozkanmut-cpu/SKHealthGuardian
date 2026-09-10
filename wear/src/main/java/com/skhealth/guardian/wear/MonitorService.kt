@@ -29,6 +29,7 @@ class MonitorService : Service() {
     private var lastValidReadingAt = 0L
     private var serviceStartedAt = 0L
     private var lastSensorFailureAlertAt = 0L
+    @Volatile private var inMemoryTechnicalAlertRetry: AlertEvent? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -55,9 +56,18 @@ class MonitorService : Service() {
     private fun startHeartbeat() {
         scope.launch {
             while (isActive) {
+                retryInMemoryTechnicalAlert()
                 runCatching { bridge.sendHeartbeat(batteryPct()) }
                 delay(60_000L)
             }
+        }
+    }
+
+    private suspend fun retryInMemoryTechnicalAlert() {
+        val pending = inMemoryTechnicalAlertRetry ?: return
+        val deliveredOrQueued = runCatching { bridge.sendAlert(pending) }.getOrDefault(false)
+        if (deliveredOrQueued && inMemoryTechnicalAlertRetry?.eventId == pending.eventId) {
+            inMemoryTechnicalAlertRetry = null
         }
     }
 
@@ -98,7 +108,13 @@ class MonitorService : Service() {
                             "Saat sensörü uzun süredir geçerli ölçüm üretemiyor"
                         )
                         LocalAlarm.raise(this@MonitorService, alert)
-                        runCatching { bridge.sendAlert(alert) }
+                        val deliveredOrQueued = runCatching { bridge.sendAlert(alert) }.getOrDefault(false)
+                        if (!deliveredOrQueued) {
+                            // SharedPreferences commit itself failed. The local alarm remains active;
+                            // keep the exact same event in memory and retry on every heartbeat while
+                            // this service process is alive instead of silently dropping remote alerting.
+                            inMemoryTechnicalAlertRetry = alert
+                        }
                     }
                 }
             }
