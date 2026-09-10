@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertIdentity
+import com.skhealth.guardian.shared.ExactAlertResourcePolicy
 import com.skhealth.guardian.shared.HealthReading
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -136,13 +137,12 @@ class AlertDispatcher(private val context: Context) {
     }
 
     private fun localNotification(alarmIntent: Intent, alertId: String, alert: AlertEvent) {
+        val notificationTag = ExactAlertResourcePolicy.notificationTag(alertId) ?: return
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(context, 0, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        // Android supports (tag, id) notification identity. Using the exact alarm ID as the tag
-        // avoids hash collisions and prevents one simultaneous alarm from overwriting another.
         nm.notify(
-            alertId,
+            notificationTag,
             AlarmActivity.CRITICAL_NOTIFICATION_ID,
             NotificationCompat.Builder(context, "critical")
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
