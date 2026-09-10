@@ -14,14 +14,14 @@ object AlertAcknowledgementStore {
      * Returns true only after the acknowledgement is durably committed.
      */
     fun acknowledge(context: Context, alertId: String): Boolean {
-        if (!AlertIdentity.isValid(alertId)) return false
+        if (!AlertIdentity.isExact(alertId)) return false
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         val protected = EscalationScheduler.pendingExactAlertIds(context)
         return BoundedIdStore.add(prefs, KEY_ACK_IDS, alertId, MAX_ACK_IDS, protected)
     }
 
     fun isAcknowledged(context: Context, alertId: String): Boolean {
-        if (!AlertIdentity.isValid(alertId)) return false
+        if (!AlertIdentity.isExact(alertId)) return false
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         return BoundedIdStore.contains(prefs, KEY_ACK_IDS, alertId)
     }
