@@ -9,9 +9,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
-import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.ExactAlertResourcePolicy
 
 class AlarmActivity : Activity() {
@@ -39,14 +37,15 @@ class AlarmActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
             background = UiStyle.rounded(0xFF3A171A.toInt(), context = this@AlarmActivity)
         }
-        banner.addView(UiStyle.text(this, "⚠  SAĞLIK ALARMI", 18f, UiStyle.RED, true, Gravity.CENTER))
+        banner.addView(UiStyle.icon(this, SkIcon.STATUS_ALERT, 34, UiStyle.RED, "Sağlık alarmı"), LinearLayout.LayoutParams(dp(40), dp(40)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        banner.addView(UiStyle.text(this, "SAĞLIK ALARMI", 18f, UiStyle.RED, true, Gravity.CENTER).apply { setPadding(0, dp(8), 0, 0) })
         banner.addView(UiStyle.text(this, reason, 25f, UiStyle.TEXT, true, Gravity.CENTER).apply { setPadding(0, dp(12), 0, 0) })
         root.addView(banner)
 
         val stackMetrics = resources.configuration.fontScale >= 1.3f || resources.configuration.screenWidthDp < 360
         val metrics = LinearLayout(this).apply { orientation = if (stackMetrics) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
-        val spoCard = metricCard("SpO₂", if (spo2 >= 0) "$spo2%" else "—", UiStyle.RED)
-        val hrCard = metricCard("Nabız", if (hr >= 0) "$hr" else "—", if (hr >= 0) UiStyle.AMBER else UiStyle.MUTED)
+        val spoCard = metricCard(SkIcon.SPO2, "SpO₂", if (spo2 >= 0) "$spo2%" else "—", UiStyle.RED)
+        val hrCard = metricCard(SkIcon.HEART, "Nabız", if (hr >= 0) "$hr" else "—", if (hr >= 0) UiStyle.AMBER else UiStyle.MUTED)
         if (stackMetrics) {
             metrics.addView(spoCard)
             metrics.addView(hrCard, UiStyle.sectionParams(this, 10))
@@ -58,14 +57,15 @@ class AlarmActivity : Activity() {
         root.addView(metrics, UiStyle.sectionParams(this))
 
         val info = UiStyle.card(this)
-        info.addView(UiStyle.text(this, "Kaynak", 13f, UiStyle.MUTED))
-        info.addView(UiStyle.text(this, source, 16f, UiStyle.TEXT, true).apply { setPadding(0, dp(5), 0, 0) })
+        info.addView(UiStyle.iconLabel(this, SkIcon.DEVICE_INFO, "Kaynak", UiStyle.BLUE, UiStyle.MUTED, 20, 13f, true))
+        info.addView(UiStyle.text(this, source, 16f, UiStyle.TEXT, true).apply { setPadding(dp(29), dp(5), 0, 0) })
         info.addView(UiStyle.divider(this))
-        info.addView(UiStyle.text(this, "Alarm doğrulandı. Ölçümü kontrol edin. Ciddi nefes darlığı, bilinç değişikliği veya belirgin kötüleşme varsa acil yardım alın.", 15f, UiStyle.TEXT))
-        info.addView(UiStyle.text(this, status, 13f, UiStyle.MUTED).apply { setPadding(0, dp(12), 0, 0) })
+        info.addView(UiStyle.iconLabel(this, SkIcon.INFO, "Alarm doğrulandı. Ölçümü kontrol edin.", UiStyle.AMBER, UiStyle.TEXT, 20, 15f, false))
+        info.addView(UiStyle.text(this, "Ciddi nefes darlığı, bilinç değişikliği veya belirgin kötüleşme varsa acil yardım alın.", 15f, UiStyle.TEXT).apply { setPadding(dp(29), dp(6), 0, 0) })
+        info.addView(UiStyle.text(this, status, 13f, UiStyle.MUTED).apply { setPadding(dp(29), dp(12), 0, 0) })
         root.addView(info, UiStyle.sectionParams(this))
 
-        root.addView(action("🔕", "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
+        root.addView(action(SkIcon.BELL, "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
             val exactTag = ExactAlertResourcePolicy.notificationTag(alertId)
             val exact = exactTag != null
             val ackPersisted = if (exact) {
@@ -82,12 +82,7 @@ class AlarmActivity : Activity() {
             }
 
             val nm = getSystemService(NotificationManager::class.java)
-            if (exact) {
-                nm.cancel(exactTag!!, CRITICAL_NOTIFICATION_ID)
-            } else {
-                // Migration fallback for old untagged notifications.
-                nm.cancel(CRITICAL_NOTIFICATION_ID)
-            }
+            if (exact) nm.cancel(exactTag!!, CRITICAL_NOTIFICATION_ID) else nm.cancel(CRITICAL_NOTIFICATION_ID)
             WatchCommandSender(this@AlarmActivity).silenceAlarm()
             if (exact) {
                 EscalationScheduler.cancel(this@AlarmActivity, exactTag!!, alertTs)
@@ -99,16 +94,16 @@ class AlarmActivity : Activity() {
             finish()
         }, UiStyle.sectionParams(this, 16))
 
-        root.addView(action("↻", "Tekrar ölç", "Watch üzerinden yeni ölçüm iste", UiStyle.BLUE) {
+        root.addView(action(SkIcon.REFRESH, "Tekrar ölç", "Watch üzerinden yeni ölçüm iste", UiStyle.BLUE) {
             WatchCommandSender(this@AlarmActivity).requestMeasurement()
             AlarmTimelineStore.add(this@AlarmActivity, "TEKRAR ÖLÇÜM", "Alarm ekranından manuel ölçüm istendi")
         }, UiStyle.sectionParams(this, 10))
 
-        root.addView(action("☎", "Acil durum kişisini ara", "Tanımlı ilk arama kişisini kullan", UiStyle.GREEN) {
+        root.addView(action(SkIcon.CONTACTS, "Acil durum kişisini ara", "Tanımlı ilk arama kişisini kullan", UiStyle.GREEN) {
             ContactStore.contacts(this@AlarmActivity).firstOrNull { it.callEnabled }?.let { CallPlacer(this@AlarmActivity).call(it.phoneNumber) }
         }, UiStyle.sectionParams(this, 10))
 
-        root.addView(action("⌂", "Uygulamaya dön", "Ana ekrana geç", UiStyle.MUTED) {
+        root.addView(action(SkIcon.HOME, "Uygulamaya dön", "Ana ekrana geç", UiStyle.MUTED) {
             startActivity(Intent(this@AlarmActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             finish()
         }, UiStyle.sectionParams(this, 10))
@@ -116,25 +111,26 @@ class AlarmActivity : Activity() {
         setContentView(ScrollView(this).apply { isFillViewport = true; setBackgroundColor(UiStyle.BG); addView(root) })
     }
 
-    private fun metricCard(title: String, value: String, color: Int) = UiStyle.card(this).apply {
+    private fun metricCard(icon: SkIcon, title: String, value: String, color: Int) = UiStyle.card(this).apply {
         gravity = Gravity.CENTER_HORIZONTAL
-        addView(UiStyle.text(this@AlarmActivity, title, 14f, UiStyle.MUTED, gravity = Gravity.CENTER))
+        addView(UiStyle.icon(this@AlarmActivity, icon, 24, color, title), LinearLayout.LayoutParams(dp(28), dp(28)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        addView(UiStyle.text(this@AlarmActivity, title, 14f, UiStyle.MUTED, gravity = Gravity.CENTER).apply { setPadding(0, dp(5), 0, 0) })
         addView(UiStyle.text(this@AlarmActivity, value, 40f, color, true, Gravity.CENTER).apply { setPadding(0, dp(8), 0, 0) })
     }
 
-    private fun action(icon: String, title: String, subtitle: String, accent: Int, block: () -> Unit) = UiStyle.card(this, 16).apply {
+    private fun action(icon: SkIcon, title: String, subtitle: String, accent: Int, block: () -> Unit) = UiStyle.card(this, 16).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = dp(70)
         isClickable = true
         isFocusable = true
         setOnClickListener { block() }
-        addView(UiStyle.text(this@AlarmActivity, icon, 23f, accent, true), LinearLayout.LayoutParams(dp(40), ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(UiStyle.icon(this@AlarmActivity, icon, 25, accent, title), LinearLayout.LayoutParams(dp(40), dp(40)).apply { gravity = Gravity.CENTER_VERTICAL })
         val labels = LinearLayout(this@AlarmActivity).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(UiStyle.text(this@AlarmActivity, title, 16f, UiStyle.TEXT, true))
         labels.addView(UiStyle.text(this@AlarmActivity, subtitle, 12.5f, UiStyle.MUTED).apply { setPadding(0, dp(4), 0, 0) })
         addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(UiStyle.text(this@AlarmActivity, "›", 24f, UiStyle.MUTED))
+        addView(UiStyle.icon(this@AlarmActivity, SkIcon.CHEVRON_RIGHT, 20, UiStyle.MUTED, null), LinearLayout.LayoutParams(dp(24), dp(24)))
     }
 
     private fun dp(value: Int) = UiStyle.dp(this, value)
