@@ -13,7 +13,12 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <application android:label="SK Health Guardian" android:allowBackup="false" android:theme="@style/SKHealthGuardianTheme">
+    <application
+        android:label="SK Health Guardian"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:theme="@style/SKHealthGuardianTheme">
         <activity android:name=".AlarmActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true" />
         <activity android:name=".QaSimulationActivity" android:exported="false" />
         <activity android:name=".SystemTestActivity" android:exported="false" />
