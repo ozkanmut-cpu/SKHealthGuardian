@@ -38,7 +38,11 @@ class WearReadingService : WearableListenerService() {
                 val alertTs = p.getOrNull(3)?.toLongOrNull() ?: 0L
                 val reason = p.getOrNull(4).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
                 if (!AlertIdentity.isValid(alertId)) return
-                AlertAcknowledgementStore.acknowledge(this, alertId)
+                val persisted = AlertAcknowledgementStore.acknowledge(this, alertId)
+                if (!persisted) {
+                    AlarmTimelineStore.add(this, "ACK KAYIT HATASI", "Saatten gelen alarm susturma kalıcı kaydedilemedi; escalation aktif tutuldu", System.currentTimeMillis())
+                    return
+                }
                 EscalationScheduler.cancel(this, alertId, alertTs)
                 getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
                 AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, if (alertTs > 0L) alertTs else System.currentTimeMillis())
@@ -48,7 +52,11 @@ class WearReadingService : WearableListenerService() {
             val p = raw.split('|', limit = 2)
             val alertTs = p.getOrNull(0)?.toLongOrNull() ?: return
             val reason = p.getOrNull(1).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
-            AlertAcknowledgementStore.acknowledge(this, alertTs)
+            val persisted = AlertAcknowledgementStore.acknowledge(this, alertTs)
+            if (!persisted) {
+                AlarmTimelineStore.add(this, "ACK KAYIT HATASI", "Saatten gelen legacy alarm susturma kalıcı kaydedilemedi; escalation aktif tutuldu", System.currentTimeMillis())
+                return
+            }
             EscalationScheduler.cancel(this, alertTs)
             getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
             AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, alertTs)
