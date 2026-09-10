@@ -7,6 +7,7 @@ import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.TechnicalAlertReplayPolicy
 import com.skhealth.guardian.shared.TechnicalAlertWireCodec
 import com.skhealth.guardian.shared.TechnicalConnectivityCoalescingPolicy
 
@@ -55,11 +56,29 @@ class WearReadingService : WearableListenerService() {
         }
         if (event.path == "/health/alert") {
             val alert = TechnicalAlertWireCodec.decode(String(event.data)) ?: return
+            val now = System.currentTimeMillis()
+            val lastReading = MonitoringState.lastReading(this)
+            val maxTechnicalAgeMs = maxOf(AppSettings.load(this).staleDataMs, MIN_LIVE_REPLAY_AGE_MS)
+            if (!TechnicalAlertReplayPolicy.shouldAccept(
+                    nowMs = now,
+                    alertTimestampMs = alert.timestampMs,
+                    lastValidReadingMs = lastReading,
+                    maxAgeMs = maxTechnicalAgeMs
+                )
+            ) {
+                AlarmTimelineStore.add(
+                    this,
+                    "ESKİ TEKNİK ALARM YOK SAYILDI",
+                    "Saatten gecikmeli gelen ${alert.type.name} alarmından sonra geçerli veri görüldüğü veya alarm çok eski olduğu için uzak uyarı başlatılmadı",
+                    now
+                )
+                return
+            }
+
             val alertId = AlertIdentity.of(alert)
             if (AlertAcknowledgementStore.isAcknowledged(this, alertId)) return
 
             if (alert.type == AlertType.SENSOR_FAILURE) {
-                val lastReading = MonitoringState.lastReading(this)
                 val lastHeartbeat = WatchHeartbeatStore.timestamp(this)
                 val staleAlertedFor = MonitoringState.lastStaleAlertedFor(this)
                 val disconnectAlertedFor = WatchHeartbeatStore.lastDisconnectAlertedFor(this)
