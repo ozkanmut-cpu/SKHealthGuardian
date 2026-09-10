@@ -7,6 +7,7 @@ import com.skhealth.guardian.shared.AlarmEngineState
 object AlarmEngineStateStore {
     private const val PREF = "alarm_engine_state"
     private const val KEY_SIGNATURE = "signature"
+    private const val WRITE_ATTEMPTS = 3
 
     fun signature(config: AlarmConfig, spo2Pc60: Boolean, hrPc60: Boolean): String = listOf(
         config.spo2CriticalImmediate,
@@ -36,20 +37,29 @@ object AlarmEngineStateStore {
     }
 
     @Synchronized
-    fun save(context: Context, signature: String, state: AlarmEngineState) {
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
-            .putString(KEY_SIGNATURE, signature)
-            .putInt("low_spo2_count", state.lowSpo2Count)
-            .putInt("high_hr_count", state.highHrCount)
-            .putInt("low_hr_count", state.lowHrCount)
-            .putString("spo2_episode", state.spo2Episode)
-            .putBoolean("high_hr_episode", state.highHrEpisodeActive)
-            .putBoolean("low_hr_episode", state.lowHrEpisodeActive)
-            .commit()
+    fun save(context: Context, signature: String, state: AlarmEngineState): Boolean {
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        repeat(WRITE_ATTEMPTS) {
+            val committed = prefs.edit()
+                .putString(KEY_SIGNATURE, signature)
+                .putInt("low_spo2_count", state.lowSpo2Count)
+                .putInt("high_hr_count", state.highHrCount)
+                .putInt("low_hr_count", state.lowHrCount)
+                .putString("spo2_episode", state.spo2Episode)
+                .putBoolean("high_hr_episode", state.highHrEpisodeActive)
+                .putBoolean("low_hr_episode", state.lowHrEpisodeActive)
+                .commit()
+            if (committed) return true
+        }
+        return false
     }
 
     @Synchronized
-    fun clear(context: Context) {
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().commit()
+    fun clear(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        repeat(WRITE_ATTEMPTS) {
+            if (prefs.edit().clear().commit()) return true
+        }
+        return false
     }
 }
