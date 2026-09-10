@@ -16,20 +16,37 @@ object EscalationScheduler {
     private const val DUE2_PREFIX = "due2_"
     private const val REASON2_PREFIX = "reason2_"
     private const val TS2_PREFIX = "ts2_"
+    private const val PERSIST_ATTEMPTS = 3
 
     @Synchronized
-    fun schedule(context: Context, alertId: String, alertTs: Long, reason: String, dueAtMs: Long) {
-        if (!AlertIdentity.isValid(alertId) || alertTs <= 0L || dueAtMs <= 0L) return
-        if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) return
+    fun schedule(context: Context, alertId: String, alertTs: Long, reason: String, dueAtMs: Long): Boolean {
+        if (!AlertIdentity.isExact(alertId) || alertTs <= 0L || dueAtMs <= 0L) return false
+        if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) return false
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        prefs.edit().putLong(DUE2_PREFIX + alertId, dueAtMs).putString(REASON2_PREFIX + alertId, reason).putLong(TS2_PREFIX + alertId, alertTs).commit()
+        val persisted = commitWithRetry {
+            prefs.edit()
+                .putLong(DUE2_PREFIX + alertId, dueAtMs)
+                .putString(REASON2_PREFIX + alertId, reason)
+                .putLong(TS2_PREFIX + alertId, alertTs)
+                .commit()
+        }
+        // Arm even after a storage failure so the current device session still has a best-effort
+        // escalation. Durable restore after reboot is only guaranteed when persisted=true.
         arm(context, alertId, alertTs, reason, dueAtMs)
+        if (!persisted) {
+            AlarmTimelineStore.add(
+                context,
+                "ESCALATION KAYIT HATASI",
+                "Bekleyen exact escalation kalıcı kaydedilemedi; mevcut oturumda AlarmManager kuruldu ancak reboot sonrası geri yükleme garanti değil"
+            )
+        }
         if (AlertAcknowledgementStore.isAcknowledged(context, alertId)) cancel(context, alertId, alertTs)
+        return persisted
     }
 
     @Synchronized
     fun cancel(context: Context, alertId: String, alertTs: Long) {
-        if (!AlertIdentity.isValid(alertId)) return
+        if (!AlertIdentity.isExact(alertId)) return
         context.getSystemService(AlarmManager::class.java).cancel(pendingIntent(context, alertId, alertTs, ""))
         cleanupExact(context.getSharedPreferences(PREF, Context.MODE_PRIVATE), alertId)
     }
@@ -43,7 +60,7 @@ object EscalationScheduler {
             .asSequence()
             .filter { it.startsWith(DUE2_PREFIX) }
             .map { it.removePrefix(DUE2_PREFIX) }
-            .filter { AlertIdentity.isValid(it) }
+            .filter { AlertIdentity.isExact(it) }
             .toSet()
     }
 
@@ -51,7 +68,9 @@ object EscalationScheduler {
     fun schedule(context: Context, alertTs: Long, reason: String, dueAtMs: Long) {
         if (alertTs <= 0L || dueAtMs <= 0L) return
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        prefs.edit().putLong(DUE_PREFIX + alertTs, dueAtMs).putString(REASON_PREFIX + alertTs, reason).commit()
+        commitWithRetry {
+            prefs.edit().putLong(DUE_PREFIX + alertTs, dueAtMs).putString(REASON_PREFIX + alertTs, reason).commit()
+        }
         armLegacy(context, alertTs, reason, dueAtMs)
     }
 
@@ -59,7 +78,12 @@ object EscalationScheduler {
     fun cancel(context: Context, alertTs: Long) {
         if (alertTs <= 0L) return
         context.getSystemService(AlarmManager::class.java).cancel(pendingIntentLegacy(context, alertTs, ""))
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().remove(DUE_PREFIX + alertTs).remove(REASON_PREFIX + alertTs).commit()
+        commitWithRetry {
+            context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+                .remove(DUE_PREFIX + alertTs)
+                .remove(REASON_PREFIX + alertTs)
+                .commit()
+        }
     }
 
     fun markConsumed(context: Context, alertTs: Long) = cancel(context, alertTs)
@@ -78,7 +102,7 @@ object EscalationScheduler {
                 return@forEach
             }
             val alertTs = prefs.getLong(TS2_PREFIX + alertId, 0L)
-            if (!AlertIdentity.isValid(alertId) || alertTs <= 0L) {
+            if (!AlertIdentity.isExact(alertId) || alertTs <= 0L) {
                 cleanupExact(prefs, alertId)
                 return@forEach
             }
@@ -111,11 +135,20 @@ object EscalationScheduler {
     }
 
     private fun cleanupExact(prefs: SharedPreferences, alertId: String) {
-        prefs.edit()
-            .remove(DUE2_PREFIX + alertId)
-            .remove(REASON2_PREFIX + alertId)
-            .remove(TS2_PREFIX + alertId)
-            .commit()
+        commitWithRetry {
+            prefs.edit()
+                .remove(DUE2_PREFIX + alertId)
+                .remove(REASON2_PREFIX + alertId)
+                .remove(TS2_PREFIX + alertId)
+                .commit()
+        }
+    }
+
+    private inline fun commitWithRetry(block: () -> Boolean): Boolean {
+        repeat(PERSIST_ATTEMPTS) {
+            if (block()) return true
+        }
+        return false
     }
 
     private fun arm(context: Context, alertId: String, alertTs: Long, reason: String, dueAtMs: Long) {
