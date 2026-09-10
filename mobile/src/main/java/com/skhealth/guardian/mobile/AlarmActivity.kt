@@ -12,6 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.skhealth.guardian.shared.AlertIdentity
+import com.skhealth.guardian.shared.ExactAlertResourcePolicy
 
 class AlarmActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,9 +66,10 @@ class AlarmActivity : Activity() {
         root.addView(info, UiStyle.sectionParams(this))
 
         root.addView(action("🔕", "Alarmı sustur", "Watch ve telefon alarmını kapat", UiStyle.RED) {
-            val exact = AlertIdentity.isValid(alertId)
+            val exactTag = ExactAlertResourcePolicy.notificationTag(alertId)
+            val exact = exactTag != null
             val ackPersisted = if (exact) {
-                AlertAcknowledgementStore.acknowledge(this@AlarmActivity, alertId!!)
+                AlertAcknowledgementStore.acknowledge(this@AlarmActivity, exactTag!!)
             } else {
                 val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
                 AlertAcknowledgementStore.acknowledge(this@AlarmActivity, acknowledgedTs)
@@ -81,14 +83,14 @@ class AlarmActivity : Activity() {
 
             val nm = getSystemService(NotificationManager::class.java)
             if (exact) {
-                nm.cancel(alertId!!, CRITICAL_NOTIFICATION_ID)
+                nm.cancel(exactTag!!, CRITICAL_NOTIFICATION_ID)
             } else {
                 // Migration fallback for old untagged notifications.
                 nm.cancel(CRITICAL_NOTIFICATION_ID)
             }
             WatchCommandSender(this@AlarmActivity).silenceAlarm()
             if (exact) {
-                EscalationScheduler.cancel(this@AlarmActivity, alertId!!, alertTs)
+                EscalationScheduler.cancel(this@AlarmActivity, exactTag!!, alertTs)
             } else {
                 val acknowledgedTs = if (alertTs > 0) alertTs else System.currentTimeMillis()
                 EscalationScheduler.cancel(this@AlarmActivity, acknowledgedTs)
