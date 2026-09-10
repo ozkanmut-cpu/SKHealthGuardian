@@ -8,7 +8,7 @@ import android.graphics.RectF
 import android.view.View
 import kotlin.math.min
 
-enum class WearIcon { ALERT, BELL_OFF, REFRESH, HOME, CHEVRON_RIGHT, WATCH, SPO2, HEART }
+enum class WearIcon { ALERT, STATUS_OK, BELL_OFF, REFRESH, HOME, CHEVRON_RIGHT, WATCH, SPO2, HEART }
 
 class WearIconView(
     context: Context,
@@ -37,6 +37,11 @@ class WearIconView(
                 canvas.drawPath(p, stroke)
                 canvas.drawLine(s*.50f,s*.35f,s*.50f,s*.60f,stroke)
                 canvas.drawCircle(s*.50f,s*.70f,s*.04f,fill)
+            }
+            WearIcon.STATUS_OK -> {
+                canvas.drawCircle(s*.50f,s*.50f,s*.32f,stroke)
+                val p = Path().apply { moveTo(s*.32f,s*.51f); lineTo(s*.45f,s*.64f); lineTo(s*.70f,s*.36f) }
+                canvas.drawPath(p,stroke)
             }
             WearIcon.BELL_OFF -> {
                 val p = Path().apply { moveTo(s*.25f,s*.68f); lineTo(s*.32f,s*.56f); lineTo(s*.32f,s*.40f); cubicTo(s*.32f,s*.18f,s*.68f,s*.18f,s*.68f,s*.40f); lineTo(s*.68f,s*.56f); lineTo(s*.75f,s*.68f); close() }
