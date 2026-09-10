@@ -50,7 +50,6 @@ class MainActivity : Activity() {
             setBackgroundColor(UiStyle.BG)
         }
         setContentView(page)
-
         page.addView(header())
 
         root = LinearLayout(this).apply {
@@ -103,9 +102,6 @@ class MainActivity : Activity() {
         addRecentMeasurements(latestValid)
         addEmergencyContactsCard()
         addQuickMeasureButton()
-
-        // Shared navigation applies the real Android navigation-bar inset.
-        // This prevents the app tabs from sitting under Samsung's 3-button navigation.
         page.addView(UiStyle.appBottomNavigation(this, "home"))
     }
 
@@ -114,9 +110,7 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(20), dp(18), dp(14), dp(12))
 
-        val labels = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+        val labels = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(UiStyle.text(this@MainActivity, "SK Health Guardian", 27f, UiStyle.TEXT, true))
         labels.addView(
             UiStyle.text(this@MainActivity, "Sağlık izleme ve alarm merkezi", 14f, UiStyle.MUTED).apply {
@@ -125,14 +119,11 @@ class MainActivity : Activity() {
         )
         addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-        val settings = UiStyle.text(this@MainActivity, "⚙", 25f, UiStyle.TEXT, true, Gravity.CENTER).apply {
-            minimumWidth = dp(48)
-            minimumHeight = dp(48)
-            gravity = Gravity.CENTER
+        val settings = UiStyle.icon(this@MainActivity, SkIcon.SETTINGS, 25, UiStyle.TEXT, "Ayarlar").apply {
             background = UiStyle.rounded(UiStyle.SURFACE, 16, context = this@MainActivity)
             isClickable = true
             isFocusable = true
-            contentDescription = "Ayarlar"
+            setPadding(dp(11), dp(11), dp(11), dp(11))
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsHubActivity::class.java)) }
         }
         addView(settings, LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -143,6 +134,12 @@ class MainActivity : Activity() {
             Severity.NORMAL -> UiStyle.GREEN
             Severity.WARNING, Severity.WAITING -> UiStyle.AMBER
             Severity.ALARM -> UiStyle.RED
+        }
+        val icon = when (severity) {
+            Severity.NORMAL -> SkIcon.STATUS_OK
+            Severity.WARNING -> SkIcon.STATUS_WARNING
+            Severity.ALARM -> SkIcon.STATUS_ALERT
+            Severity.WAITING -> SkIcon.STATUS_NONE
         }
         val title = when (severity) {
             Severity.NORMAL -> "İzleme aktif"
@@ -169,18 +166,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(
-            UiStyle.text(this, "●", 26f, color, true, Gravity.CENTER),
-            LinearLayout.LayoutParams(dp(48), dp(48))
-        )
+        row.addView(UiStyle.icon(this, icon, 32, color, title), LinearLayout.LayoutParams(dp(48), dp(48)))
 
         val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(UiStyle.text(this, title, 19f, UiStyle.TEXT, true))
-        labels.addView(
-            UiStyle.text(this, subtitle, 13.5f, UiStyle.MUTED).apply {
-                setPadding(0, dp(5), 0, 0)
-            }
-        )
+        labels.addView(UiStyle.text(this, subtitle, 13.5f, UiStyle.MUTED).apply { setPadding(0, dp(5), 0, 0) })
         row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
         val last = LinearLayout(this).apply {
@@ -188,23 +178,13 @@ class MainActivity : Activity() {
             gravity = Gravity.END
         }
         last.addView(UiStyle.text(this, "Son veri", 11.5f, UiStyle.MUTED))
-        val lastText = if (sourceTs > 0L) {
-            SimpleDateFormat("HH:mm", Locale("tr", "TR")).format(Date(sourceTs))
-        } else "—"
-        last.addView(
-            UiStyle.text(this, lastText, 15f, UiStyle.TEXT, true).apply {
-                setPadding(0, dp(4), 0, 0)
-            }
-        )
+        val lastText = if (sourceTs > 0L) SimpleDateFormat("HH:mm", Locale("tr", "TR")).format(Date(sourceTs)) else "—"
+        last.addView(UiStyle.text(this, lastText, 15f, UiStyle.TEXT, true).apply { setPadding(0, dp(4), 0, 0) })
         row.addView(last)
         card.addView(row)
 
         if (age != Long.MAX_VALUE) {
-            card.addView(
-                UiStyle.text(this, ageText(age), 12f, UiStyle.MUTED).apply {
-                    setPadding(dp(48), dp(8), 0, 0)
-                }
-            )
+            card.addView(UiStyle.text(this, ageText(age), 12f, UiStyle.MUTED).apply { setPadding(dp(48), dp(8), 0, 0) })
         }
         root.addView(card)
     }
@@ -218,7 +198,7 @@ class MainActivity : Activity() {
 
         row.addView(
             deviceCard(
-                icon = "⌚",
+                icon = SkIcon.WATCH,
                 title = "Galaxy Watch",
                 connected = watchConnected,
                 detail = if (watchConnected) {
@@ -231,12 +211,10 @@ class MainActivity : Activity() {
 
         row.addView(
             deviceCard(
-                icon = "▣",
+                icon = SkIcon.OXIMETER,
                 title = "PC-60FW",
                 connected = pcConnected,
-                detail = if (pcConnected) {
-                    "Bağlı • ${ageText((now - pc60.lastPacketAt).coerceAtLeast(0L))}"
-                } else "Bağlı değil",
+                detail = if (pcConnected) "Bağlı • ${ageText((now - pc60.lastPacketAt).coerceAtLeast(0L))}" else "Bağlı değil",
                 onClick = { startActivity(Intent(this, DevicesActivity::class.java)) }
             ),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(6) }
@@ -245,7 +223,7 @@ class MainActivity : Activity() {
     }
 
     private fun deviceCard(
-        icon: String,
+        icon: SkIcon,
         title: String,
         connected: Boolean,
         detail: String,
@@ -260,33 +238,29 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        titleRow.addView(
-            UiStyle.text(this@MainActivity, icon, 22f, UiStyle.BLUE, true, Gravity.CENTER),
-            LinearLayout.LayoutParams(dp(38), dp(38))
-        )
+        titleRow.addView(UiStyle.icon(this@MainActivity, icon, 28, UiStyle.BLUE, title), LinearLayout.LayoutParams(dp(38), dp(38)))
         titleRow.addView(UiStyle.text(this@MainActivity, title, 16.5f, UiStyle.TEXT, true))
         addView(titleRow)
 
         addView(
-            UiStyle.text(
-                this@MainActivity,
-                "●  $detail",
-                12.5f,
-                if (connected) UiStyle.GREEN else UiStyle.MUTED
-            ).apply { setPadding(dp(38), dp(7), 0, 0) }
-        )
-
-        val actionLabel = if (connected) "Ayrıntılar" else "🔗  Bağlan"
-        addView(
-            UiStyle.text(this@MainActivity, actionLabel, 13.5f, UiStyle.BLUE, true, Gravity.CENTER).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(8), dp(10), dp(8), dp(10))
-                background = UiStyle.rounded(0xFF17304A.toInt(), 16, context = this@MainActivity)
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(14)
+            UiStyle.text(this@MainActivity, "●  $detail", 12.5f, if (connected) UiStyle.GREEN else UiStyle.MUTED).apply {
+                setPadding(dp(38), dp(7), 0, 0)
             }
         )
+
+        val action = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(10), dp(8), dp(10))
+            background = UiStyle.rounded(0xFF17304A.toInt(), 16, context = this@MainActivity)
+            addView(UiStyle.icon(this@MainActivity, if (connected) SkIcon.DEVICE_INFO else SkIcon.LINK, 18, UiStyle.BLUE))
+            addView(
+                UiStyle.text(this@MainActivity, if (connected) "Ayrıntılar" else "Bağlan", 13.5f, UiStyle.BLUE, true).apply {
+                    setPadding(dp(7), 0, 0, 0)
+                }
+            )
+        }
+        addView(action, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
     }
 
     private fun addMetricCards(spo2: Int?, hr: Int?, low: Int, high: Int) {
@@ -307,18 +281,18 @@ class MainActivity : Activity() {
         }
 
         holder.addView(
-            metricCard("◉", "SpO₂", "%", spo2?.toString() ?: "—", if (spo2 == null) "Veri yok" else spo2Label(spo2, low), spo2Color, UiStyle.BLUE),
+            metricCard(SkIcon.SPO2, "SpO₂", "%", spo2?.toString() ?: "—", if (spo2 == null) "Veri yok" else spo2Label(spo2, low), spo2Color, UiStyle.BLUE),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(6) }
         )
         holder.addView(
-            metricCard("♥", "Nabız", "bpm", hr?.toString() ?: "—", if (hr == null) "Veri yok" else hrLabel(hr, high), hrColor, UiStyle.RED),
+            metricCard(SkIcon.HEART, "Nabız", "bpm", hr?.toString() ?: "—", if (hr == null) "Veri yok" else hrLabel(hr, high), hrColor, UiStyle.RED),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(6) }
         )
         root.addView(holder, UiStyle.sectionParams(this, 14))
     }
 
     private fun metricCard(
-        icon: String,
+        icon: SkIcon,
         title: String,
         unit: String,
         value: String,
@@ -327,30 +301,18 @@ class MainActivity : Activity() {
         iconColor: Int
     ): LinearLayout = UiStyle.card(this, 17).apply {
         minimumHeight = dp(158)
-
         val heading = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        heading.addView(
-            UiStyle.text(this@MainActivity, icon, 20f, iconColor, true, Gravity.CENTER),
-            LinearLayout.LayoutParams(dp(34), dp(34))
-        )
+        heading.addView(UiStyle.icon(this@MainActivity, icon, 26, iconColor, title), LinearLayout.LayoutParams(dp(34), dp(34)))
         heading.addView(UiStyle.text(this@MainActivity, title, 16.5f, UiStyle.TEXT, true))
         addView(heading)
-
+        addView(UiStyle.text(this@MainActivity, "$value $unit", 32f, valueColor, true).apply { setPadding(0, dp(18), 0, 0) })
         addView(
-            UiStyle.text(this@MainActivity, "$value $unit", 32f, valueColor, true).apply {
-                setPadding(0, dp(18), 0, 0)
+            UiStyle.text(this@MainActivity, "●  $state", 12.5f, if (state == "Veri yok") UiStyle.MUTED else valueColor).apply {
+                setPadding(0, dp(14), 0, 0)
             }
-        )
-        addView(
-            UiStyle.text(
-                this@MainActivity,
-                "●  $state",
-                12.5f,
-                if (state == "Veri yok") UiStyle.MUTED else valueColor
-            ).apply { setPadding(0, dp(14), 0, 0) }
         )
     }
 
@@ -364,10 +326,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(
-            UiStyle.text(this, "◷", 22f, UiStyle.GREEN, true, Gravity.CENTER),
-            LinearLayout.LayoutParams(dp(42), dp(42))
-        )
+        row.addView(UiStyle.icon(this, SkIcon.CLOCK, 28, UiStyle.GREEN, "Son ölçüm"), LinearLayout.LayoutParams(dp(42), dp(42)))
 
         val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(UiStyle.text(this, "Son ölçüm", 16.5f, UiStyle.TEXT, true))
@@ -379,13 +338,9 @@ class MainActivity : Activity() {
             recent.heartRate?.let { parts += "Nabız $it bpm" }
             "${parts.joinToString(" • ")} • ${ageText((System.currentTimeMillis() - recent.timestampMs).coerceAtLeast(0L))}"
         }
-        labels.addView(
-            UiStyle.text(this, detail, 12.5f, UiStyle.MUTED).apply {
-                setPadding(0, dp(5), 0, 0)
-            }
-        )
+        labels.addView(UiStyle.text(this, detail, 12.5f, UiStyle.MUTED).apply { setPadding(0, dp(5), 0, 0) })
         row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(UiStyle.text(this, "›", 26f, UiStyle.MUTED, false, Gravity.CENTER))
+        row.addView(UiStyle.icon(this, SkIcon.CHEVRON_RIGHT, 20, UiStyle.MUTED, "Geçmişi aç"), LinearLayout.LayoutParams(dp(28), dp(28)))
         card.addView(row)
         root.addView(card, UiStyle.sectionParams(this, 14))
     }
@@ -401,22 +356,16 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(
-            UiStyle.text(this, "●●", 18f, 0xFF9B7BFF.toInt(), true, Gravity.CENTER),
-            LinearLayout.LayoutParams(dp(42), dp(42))
-        )
+        row.addView(UiStyle.icon(this, SkIcon.CONTACTS, 29, UiStyle.PURPLE, "Acil durum kişileri"), LinearLayout.LayoutParams(dp(42), dp(42)))
         val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(UiStyle.text(this, "Acil durum kişileri", 16.5f, UiStyle.TEXT, true))
         labels.addView(
-            UiStyle.text(
-                this,
-                if (count == 0) "Henüz kişi eklenmedi" else "$count kişi yapılandırıldı",
-                12.5f,
-                UiStyle.MUTED
-            ).apply { setPadding(0, dp(5), 0, 0) }
+            UiStyle.text(this, if (count == 0) "Henüz kişi eklenmedi" else "$count kişi yapılandırıldı", 12.5f, UiStyle.MUTED).apply {
+                setPadding(0, dp(5), 0, 0)
+            }
         )
         row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(UiStyle.text(this, "›", 26f, UiStyle.MUTED, false, Gravity.CENTER))
+        row.addView(UiStyle.icon(this, SkIcon.CHEVRON_RIGHT, 20, UiStyle.MUTED, "Kişileri aç"), LinearLayout.LayoutParams(dp(28), dp(28)))
         card.addView(row)
         root.addView(card, UiStyle.sectionParams(this, 14))
     }
@@ -433,7 +382,13 @@ class MainActivity : Activity() {
             contentDescription = "Şimdi ölçüm al"
             setOnClickListener { startActivity(Intent(this@MainActivity, DevicesActivity::class.java)) }
         }
-        button.addView(UiStyle.text(this, "▶  Şimdi ölçüm al", 18f, UiStyle.TEXT, true, Gravity.CENTER))
+        val title = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(UiStyle.icon(this@MainActivity, SkIcon.PLAY, 23, UiStyle.TEXT))
+            addView(UiStyle.text(this@MainActivity, "Şimdi ölçüm al", 18f, UiStyle.TEXT, true).apply { setPadding(dp(10), 0, 0, 0) })
+        }
+        button.addView(title)
         button.addView(
             UiStyle.text(this, "Cihazları kontrol et ve veri al", 12.5f, 0xFFD9F7E7.toInt(), false, Gravity.CENTER).apply {
                 setPadding(0, dp(5), 0, 0)
@@ -472,9 +427,7 @@ class MainActivity : Activity() {
             wanted += Manifest.permission.BLUETOOTH_SCAN
         }
         val missing = wanted.filterNot { has(it) }
-        if (missing.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMISSIONS)
-        }
+        if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQ_PERMISSIONS)
     }
 
     private fun has(permission: String) =
