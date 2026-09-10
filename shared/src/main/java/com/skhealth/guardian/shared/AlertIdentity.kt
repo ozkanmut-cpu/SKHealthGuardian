@@ -29,5 +29,25 @@ object AlertIdentity {
         }
     }
 
+    /** Basic storage-safety validation retained for migration/legacy callers. */
     fun isValid(value: String?): Boolean = !value.isNullOrBlank() && value.length <= 256
+
+    /**
+     * Strict current exact identity validation.
+     * Requires a known alert type and a stable non-timestamp suffix. Legacy `:ts:` identities are
+     * deliberately excluded because they can collide when wall clock moves or two events share a
+     * timestamp.
+     */
+    fun isExact(value: String?): Boolean {
+        if (!isValid(value)) return false
+        val normalized = value!!.trim()
+        val separator = normalized.indexOf(':')
+        if (separator <= 0 || separator == normalized.lastIndex) return false
+        val typeName = normalized.substring(0, separator)
+        if (AlertType.entries.none { it.name == typeName }) return false
+        val suffix = normalized.substring(separator + 1)
+        if (suffix.isBlank() || suffix.startsWith("ts:")) return false
+        if (suffix == "event:" || suffix.startsWith("event:") && suffix.removePrefix("event:").isBlank()) return false
+        return true
+    }
 }
