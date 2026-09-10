@@ -8,7 +8,7 @@ package com.skhealth.guardian.shared
  */
 object ExactAlertResourcePolicy {
     fun notificationTag(alertId: String?): String? =
-        alertId?.trim()?.takeIf(AlertIdentity::isValid)
+        alertId?.trim()?.takeIf(AlertIdentity::isExact)
 
     fun ownsNotification(notificationTag: String?, alertId: String?): Boolean {
         val exact = notificationTag(alertId) ?: return false
@@ -16,7 +16,7 @@ object ExactAlertResourcePolicy {
     }
 
     fun remainingAfterAcknowledgement(activeAlertIds: Set<String>, acknowledgedAlertId: String): Set<String> {
-        if (!AlertIdentity.isValid(acknowledgedAlertId)) return activeAlertIds
+        if (!AlertIdentity.isExact(acknowledgedAlertId)) return activeAlertIds
         return activeAlertIds - acknowledgedAlertId
     }
 }
