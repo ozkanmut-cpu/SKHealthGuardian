@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -18,6 +19,7 @@ import java.util.Locale
 class SystemTestActivity : Activity() {
     private lateinit var output: TextView
     private lateinit var summary: TextView
+    private lateinit var summaryIcon: SkIconView
     private var preflightGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,21 +29,25 @@ class SystemTestActivity : Activity() {
         root.addView(UiStyle.detailHeader(this, "QA ön kontrol", "Telefon, Galaxy Watch, acil kişiler ve PC-60FW zincirini doğrular. Gerçek SMS/arama yalnızca sen başlatırsan çalışır."))
 
         val summaryCard = UiStyle.card(this)
-        summary = UiStyle.text(this, "Kontroller çalıştırılıyor…", 20f, UiStyle.BLUE, true)
-        summaryCard.addView(summary)
+        val summaryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        summaryIcon = UiStyle.icon(this, SkIcon.SYNC, 30, UiStyle.BLUE, null)
+        summaryRow.addView(summaryIcon, LinearLayout.LayoutParams(UiStyle.dp(this, 36), UiStyle.dp(this, 36)))
+        summary = UiStyle.text(this, "Kontroller çalıştırılıyor…", 20f, UiStyle.BLUE, true).apply { setPadding(UiStyle.dp(this@SystemTestActivity, 10), 0, 0, 0) }
+        summaryRow.addView(summary, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        summaryCard.addView(summaryRow)
         root.addView(summaryCard)
 
         val detailsCard = UiStyle.card(this)
-        detailsCard.addView(UiStyle.text(this, "Kontrol ayrıntıları", 18f, UiStyle.TEXT, true))
+        detailsCard.addView(UiStyle.iconLabel(this, SkIcon.EVENTS, "Kontrol ayrıntıları", UiStyle.BLUE, UiStyle.TEXT, 22, 18f, true))
         output = UiStyle.text(this, "", 15f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@SystemTestActivity, 10), 0, 0) }
         detailsCard.addView(output)
         root.addView(detailsCard, UiStyle.sectionParams(this))
 
-        root.addView(UiStyle.button(this, "Kontrolleri yeniden çalıştır").apply { setOnClickListener { runPreflight() } })
-        root.addView(UiStyle.button(this, "Galaxy Watch self-test + ölçüm", false).apply { setOnClickListener { runWatchTest() } })
-        root.addView(UiStyle.button(this, "PC-60FW durumunu aç", false).apply { setOnClickListener { startActivity(Intent(this@SystemTestActivity, Pc60Activity::class.java)) } })
-        root.addView(UiStyle.button(this, "Alarm ekranını güvenli test et", false).apply { setOnClickListener { previewAlarmScreen() } })
-        root.addView(UiStyle.button(this, "Gerçek SMS + arama testi", false).apply { setOnClickListener { confirmRealCommunicationTest() } })
+        root.addView(UiStyle.iconButton(this, SkIcon.REFRESH, "Kontrolleri yeniden çalıştır", true).apply { setOnClickListener { runPreflight() } })
+        root.addView(UiStyle.iconButton(this, SkIcon.WATCH, "Galaxy Watch self-test + ölçüm").apply { setOnClickListener { runWatchTest() } })
+        root.addView(UiStyle.iconButton(this, SkIcon.OXIMETER, "PC-60FW durumunu aç").apply { setOnClickListener { startActivity(Intent(this@SystemTestActivity, Pc60Activity::class.java)) } })
+        root.addView(UiStyle.iconButton(this, SkIcon.STATUS_ALERT, "Alarm ekranını güvenli test et", false, UiStyle.AMBER).apply { setOnClickListener { previewAlarmScreen() } })
+        root.addView(UiStyle.iconButton(this, SkIcon.CONTACTS, "Gerçek SMS + arama testi", false, UiStyle.RED).apply { setOnClickListener { confirmRealCommunicationTest() } })
         setContentView(ScrollView(this).apply { setBackgroundColor(UiStyle.BG); addView(root) })
         runPreflight()
     }
@@ -92,9 +98,7 @@ class SystemTestActivity : Activity() {
             finalLines += if (watchConnected) {
                 val dataText = if (lastReading == 0L) "henüz veri yok" else formatAge(lastReading) + if (watchDataFresh) " • taze" else " • eski"
                 "✓ Galaxy Watch bağlı (${nodes.size}) • $dataText"
-            } else {
-                "✗ Galaxy Watch bağlı değil"
-            }
+            } else "✗ Galaxy Watch bağlı değil"
             output.text = finalLines.joinToString("\n")
             val missing = required.filterNot { it.second }.map { it.first }.toMutableList()
             if (!watchConnected) missing += "Galaxy Watch bağlantısı"
@@ -112,7 +116,10 @@ class SystemTestActivity : Activity() {
 
     private fun showSummary(ready: Boolean, missing: List<String>, passed: Int, total: Int) {
         summary.setTextColor(if (ready) UiStyle.GREEN else UiStyle.AMBER)
-        summary.text = if (ready) "✓ SİSTEM HAZIR\n$passed/$total kontrol başarılı" else "⚠ EKSİKLER VAR\n$passed/$total kontrol başarılı" + if (missing.isEmpty()) "" else "\n${missing.joinToString("\n") { "• $it" }}"
+        summaryIcon.icon = if (ready) SkIcon.STATUS_OK else SkIcon.STATUS_WARNING
+        summaryIcon.tint = if (ready) UiStyle.GREEN else UiStyle.AMBER
+        summaryIcon.invalidate()
+        summary.text = if (ready) "SİSTEM HAZIR\n$passed/$total kontrol başarılı" else "EKSİKLER VAR\n$passed/$total kontrol başarılı" + if (missing.isEmpty()) "" else "\n${missing.joinToString("\n") { "• $it" }}"
     }
 
     private fun runWatchTest() {
