@@ -8,6 +8,7 @@ import com.skhealth.guardian.shared.AckReceiptPolicy
 import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.AlertType
+import com.skhealth.guardian.shared.ExactAlertResourcePolicy
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.TechnicalAlertReplayPolicy
 import com.skhealth.guardian.shared.TechnicalAlertWireCodec
@@ -40,21 +41,21 @@ class WearReadingService : WearableListenerService() {
                 val alertId = p.getOrNull(2).orEmpty()
                 val alertTs = p.getOrNull(3)?.toLongOrNull() ?: 0L
                 val reason = p.getOrNull(4).orEmpty().ifBlank { "Saat üzerinden alarm susturuldu" }
-                if (!AlertIdentity.isValid(alertId)) return
+                val exactTag = ExactAlertResourcePolicy.notificationTag(alertId) ?: return
 
-                if (AlertAcknowledgementStore.isAcknowledged(this, alertId)) {
+                if (AlertAcknowledgementStore.isAcknowledged(this, exactTag)) {
                     sendAckReceipt(event.sourceNodeId, receiptPayload)
                     return
                 }
 
-                val persisted = AlertAcknowledgementStore.acknowledge(this, alertId)
+                val persisted = AlertAcknowledgementStore.acknowledge(this, exactTag)
                 if (!persisted) {
                     AlarmTimelineStore.add(this, "ACK KAYIT HATASI", "Saatten gelen alarm susturma kalıcı kaydedilemedi; escalation aktif tutuldu", System.currentTimeMillis())
                     return
                 }
                 sendAckReceipt(event.sourceNodeId, receiptPayload)
-                EscalationScheduler.cancel(this, alertId, alertTs)
-                getSystemService(NotificationManager::class.java).cancel(alertId, AlarmActivity.CRITICAL_NOTIFICATION_ID)
+                EscalationScheduler.cancel(this, exactTag, alertTs)
+                getSystemService(NotificationManager::class.java).cancel(exactTag, AlarmActivity.CRITICAL_NOTIFICATION_ID)
                 AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, if (alertTs > 0L) alertTs else System.currentTimeMillis())
                 return
             }
