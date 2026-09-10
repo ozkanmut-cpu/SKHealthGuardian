@@ -33,13 +33,11 @@ class PhoneBridge(private val context: Context) {
         if (!ok) enqueueReading(payload)
     }
 
-    suspend fun sendAlert(alert: AlertEvent) {
+    suspend fun sendAlert(alert: AlertEvent): Boolean {
         val payload = TechnicalAlertWireCodec.encode(alert)
         val nodes = runCatching { Wearable.getNodeClient(context).connectedNodes.awaitCompat() }.getOrDefault(emptyList())
-        if (nodes.isEmpty()) {
-            enqueueAlert(payload)
-            return
-        }
+        if (nodes.isEmpty()) return enqueueAlert(payload)
+
         flushAlarmAcknowledgement(nodes.map { it.id })
         flushQueuedAlerts(nodes.map { it.id })
         val bytes = payload.toByteArray()
@@ -50,7 +48,7 @@ class PhoneBridge(private val context: Context) {
                     .awaitCompat()
             }.isSuccess
         }
-        if (!ok) enqueueAlert(payload)
+        return ok || enqueueAlert(payload)
     }
 
     suspend fun sendHeartbeat(batteryPct: Int) {
@@ -76,8 +74,6 @@ class PhoneBridge(private val context: Context) {
         sendAckPayload("$alertTimestampMs|${sanitizeReason(reason)}")
 
     private fun sendAckPayload(payload: String): Boolean {
-        // Durably persist before any remote side effect. If this fails the Watch keeps the local
-        // alarm active and does not tell the phone to cancel escalation; the user can retry.
         if (!savePendingAck(payload)) return false
         Wearable.getNodeClient(context).connectedNodes
             .addOnSuccessListener { nodes ->
@@ -129,7 +125,6 @@ class PhoneBridge(private val context: Context) {
         nodeIds.forEach { id ->
             runCatching { Wearable.getMessageClient(context).sendMessage(id, "/health/alarm_ack", bytes).awaitCompat() }
         }
-        // Deliberately retain until a durable receipt for this exact ACK arrives from the phone.
     }
 
     private fun encode(reading: HealthReading): String = listOf(
@@ -142,28 +137,35 @@ class PhoneBridge(private val context: Context) {
     ).joinToString("|")
 
     @Synchronized
-    private fun enqueueReading(payload: String) = enqueue(KEY_READING_QUEUE, payload, MAX_READING_QUEUE)
+    private fun enqueueReading(payload: String) {
+        enqueue(KEY_READING_QUEUE, payload, MAX_READING_QUEUE, durable = false)
+    }
 
     @Synchronized
-    private fun enqueueAlert(payload: String) = enqueue(KEY_ALERT_QUEUE, payload, MAX_ALERT_QUEUE)
+    private fun enqueueAlert(payload: String): Boolean =
+        enqueue(KEY_ALERT_QUEUE, payload, MAX_ALERT_QUEUE, durable = true)
 
-    private fun enqueue(key: String, payload: String, max: Int) {
+    private fun enqueue(key: String, payload: String, max: Int, durable: Boolean): Boolean {
         val q = loadQueue(key).toMutableList()
         if (!q.contains(payload)) q += payload
-        saveQueue(key, q.takeLast(max))
+        return saveQueue(key, q.takeLast(max), durable)
     }
 
     private fun loadQueue(key: String): List<String> = prefs.getString(key, "")
         .orEmpty().lines().filter { it.isNotBlank() }
 
-    private fun saveQueue(key: String, items: List<String>) {
-        prefs.edit().putString(key, items.joinToString("\n")).apply()
+    private fun saveQueue(key: String, items: List<String>, durable: Boolean): Boolean {
+        val editor = prefs.edit().putString(key, items.joinToString("\n"))
+        return if (durable) editor.commit() else {
+            editor.apply()
+            true
+        }
     }
 
     @Synchronized
     private fun removeDelivered(key: String, delivered: Set<String>) {
         val current = loadQueue(key)
-        saveQueue(key, current.filterNot { it in delivered })
+        saveQueue(key, current.filterNot { it in delivered }, durable = key == KEY_ALERT_QUEUE)
     }
 
     @Synchronized
