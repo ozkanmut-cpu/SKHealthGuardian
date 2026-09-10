@@ -61,6 +61,8 @@ class AckReceiptPolicyTest {
         assertNull(AckReceiptPolicy.receiptForAck(""))
         assertNull(AckReceiptPolicy.receiptForAck("v2|x|$id1|1|bad"))
         assertNull(AckReceiptPolicy.receiptForAck("v2|1|bad-id|1|bad"))
+        assertNull(AckReceiptPolicy.receiptForAck("v2|1|SPO2_CRITICAL:ts:1700000000000|1700000000000|legacy-identity"))
+        assertNull(AckReceiptPolicy.receiptForAck("v2|1|SPO2_CRITICAL:event:|1700000000000|blank-event"))
         assertNull(AckReceiptPolicy.receiptForAck("0|legacy"))
     }
 }
