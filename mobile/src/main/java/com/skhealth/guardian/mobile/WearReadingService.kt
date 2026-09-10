@@ -2,11 +2,13 @@ package com.skhealth.guardian.mobile
 
 import android.app.NotificationManager
 import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.PendingAckPolicy
 import com.skhealth.guardian.shared.TechnicalAlertReplayPolicy
 import com.skhealth.guardian.shared.TechnicalAlertWireCodec
 import com.skhealth.guardian.shared.TechnicalConnectivityCoalescingPolicy
@@ -32,6 +34,7 @@ class WearReadingService : WearableListenerService() {
         }
         if (event.path == "/health/alarm_ack") {
             val raw = String(event.data)
+            val receiptOrder = PendingAckPolicy.order(raw)
             if (raw.startsWith("v2|")) {
                 val p = raw.split('|', limit = 5)
                 val alertId = p.getOrNull(2).orEmpty()
@@ -43,6 +46,7 @@ class WearReadingService : WearableListenerService() {
                     AlarmTimelineStore.add(this, "ACK KAYIT HATASI", "Saatten gelen alarm susturma kalıcı kaydedilemedi; escalation aktif tutuldu", System.currentTimeMillis())
                     return
                 }
+                sendAckReceipt(event.sourceNodeId, receiptOrder)
                 EscalationScheduler.cancel(this, alertId, alertTs)
                 getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
                 AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, if (alertTs > 0L) alertTs else System.currentTimeMillis())
@@ -57,6 +61,7 @@ class WearReadingService : WearableListenerService() {
                 AlarmTimelineStore.add(this, "ACK KAYIT HATASI", "Saatten gelen legacy alarm susturma kalıcı kaydedilemedi; escalation aktif tutuldu", System.currentTimeMillis())
                 return
             }
+            sendAckReceipt(event.sourceNodeId, receiptOrder)
             EscalationScheduler.cancel(this, alertTs)
             getSystemService(NotificationManager::class.java).cancel(AlarmActivity.CRITICAL_NOTIFICATION_ID)
             AlarmTimelineStore.add(this, "ALARM SAATTEN SUSTURULDU", reason, alertTs)
@@ -185,6 +190,12 @@ class WearReadingService : WearableListenerService() {
         val alerts = e.evaluate(alarmReading)
         AlarmEngineStateStore.save(this, stateSignature, e.snapshot())
         alerts.forEach { AlertDispatcher(this).dispatch(it, recent, alarmReading) }
+    }
+
+    private fun sendAckReceipt(nodeId: String, order: Long) {
+        if (nodeId.isBlank() || order <= 0L) return
+        Wearable.getMessageClient(this)
+            .sendMessage(nodeId, "/health/alarm_ack_result", order.toString().toByteArray())
     }
 
     companion object {
