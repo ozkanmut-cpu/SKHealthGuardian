@@ -14,7 +14,10 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -37,9 +40,38 @@ class AccuChekBleService : Service() {
     private var gatt: BluetoothGatt? = null
     private var scanning = false
     private var currentName = "Accu-Chek Instant"
+    private var pendingBondDevice: BluetoothDevice? = null
+    private var pendingBondName: String = "Accu-Chek Instant"
 
     private val adapter: BluetoothAdapter?
         get() = getSystemService(BluetoothManager::class.java).adapter
+
+    private val bondReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED || !permissionsReady()) return
+            val device = if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            } ?: return
+            val pending = pendingBondDevice ?: return
+            if (device.address != pending.address) return
+
+            when (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)) {
+                BluetoothDevice.BOND_BONDED -> {
+                    pendingBondDevice = null
+                    updateState("Eşleştirildi; bağlanıyor")
+                    connectGatt(device, pendingBondName)
+                }
+                BluetoothDevice.BOND_BONDING -> updateState("Bluetooth eşleştirme onayı bekleniyor")
+                BluetoothDevice.BOND_NONE -> {
+                    pendingBondDevice = null
+                    updateState("Bluetooth eşleştirme tamamlanamadı")
+                }
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -55,6 +87,9 @@ class AccuChekBleService : Service() {
                 .setOngoing(true)
                 .build()
         )
+        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(bondReceiver, filter, RECEIVER_NOT_EXPORTED)
+        else @Suppress("DEPRECATION") registerReceiver(bondReceiver, filter)
         connectOrScan()
     }
 
@@ -62,6 +97,7 @@ class AccuChekBleService : Service() {
         when (intent?.action) {
             ACTION_RESCAN -> {
                 AccuChekStatusStore.clearRemembered(this)
+                pendingBondDevice = null
                 disconnectGatt()
                 startScan()
             }
@@ -74,6 +110,7 @@ class AccuChekBleService : Service() {
     override fun onDestroy() {
         stopScan()
         disconnectGatt()
+        runCatching { unregisterReceiver(bondReceiver) }
         super.onDestroy()
     }
 
@@ -148,6 +185,29 @@ class AccuChekBleService : Service() {
 
     private fun connect(device: BluetoothDevice, name: String) {
         if (!permissionsReady()) return
+        currentName = name
+        when (device.bondState) {
+            BluetoothDevice.BOND_BONDED -> connectGatt(device, name)
+            BluetoothDevice.BOND_BONDING -> {
+                pendingBondDevice = device
+                pendingBondName = name
+                updateState("Bluetooth eşleştirme onayı bekleniyor")
+            }
+            else -> {
+                pendingBondDevice = device
+                pendingBondName = name
+                updateState("Bluetooth eşleştirme başlatılıyor")
+                val started = runCatching { device.createBond() }.getOrDefault(false)
+                if (!started) {
+                    pendingBondDevice = null
+                    updateState("Bluetooth eşleştirme başlatılamadı")
+                }
+            }
+        }
+    }
+
+    private fun connectGatt(device: BluetoothDevice, name: String) {
+        if (!permissionsReady()) return
         disconnectGatt()
         currentName = name
         updateState("$name bağlanıyor")
@@ -195,11 +255,7 @@ class AccuChekBleService : Service() {
             handleCharacteristic(characteristic.uuid, characteristic.value ?: return)
         }
 
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray
-        ) {
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             handleCharacteristic(characteristic.uuid, value)
         }
 
@@ -293,9 +349,7 @@ class AccuChekBleService : Service() {
             sequenceNumber = parsed.sequenceNumber,
             measurementContext = parsed.toMeasurementContext()
         ) ?: return
-        if (updated.ownership == BloodGlucoseReading.Ownership.UNCONFIRMED) {
-            GlucoseOwnershipNotification.show(this, updated)
-        }
+        if (updated.ownership == BloodGlucoseReading.Ownership.UNCONFIRMED) GlucoseOwnershipNotification.show(this, updated)
         updateState("Bağlı; ölçüm bağlamı alındı, doğrulama bekliyor")
     }
 
@@ -320,9 +374,8 @@ class AccuChekBleService : Service() {
             return
         }
         val value = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeDescriptor(descriptor, value)
-        } else {
+        if (Build.VERSION.SDK_INT >= 33) gatt.writeDescriptor(descriptor, value)
+        else {
             @Suppress("DEPRECATION")
             run {
                 descriptor.value = value
@@ -339,12 +392,9 @@ class AccuChekBleService : Service() {
         val lastSequence = BloodGlucoseStore.latestSequence(this, deviceId)
         val command = if (lastSequence != null && lastSequence < 0xFFFF) {
             BleGlucoseRacp.reportFromSequenceCommand(lastSequence + 1)
-        } else {
-            BleGlucoseRacp.reportAllRecordsCommand()
-        }
-        if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeCharacteristic(racp, command, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-        } else {
+        } else BleGlucoseRacp.reportAllRecordsCommand()
+        if (Build.VERSION.SDK_INT >= 33) gatt.writeCharacteristic(racp, command, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        else {
             @Suppress("DEPRECATION")
             run {
                 racp.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
