@@ -24,14 +24,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.skhealth.guardian.shared.BleGlucoseContextParser
 import com.skhealth.guardian.shared.BleGlucoseMeasurementParser
+import com.skhealth.guardian.shared.BleGlucoseRacp
 import com.skhealth.guardian.shared.BloodGlucoseReading
 import java.util.UUID
 
 /**
  * Direct BLE client for standards-based glucose meters such as Accu-Chek Instant.
- *
- * Android owns secure pairing/passkey UI. No meter PIN is embedded in the app.
- * Every imported result is stored UNCONFIRMED until explicitly attributed.
+ * Android owns secure pairing/passkey UI; no meter PIN is embedded in the app.
  */
 class AccuChekBleService : Service() {
     private val handler = Handler(Looper.getMainLooper())
@@ -44,8 +43,7 @@ class AccuChekBleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Accu-Chek bağlantısı", NotificationManager.IMPORTANCE_LOW)
         )
         startForeground(
@@ -135,7 +133,6 @@ class AccuChekBleService : Service() {
                 it.uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_SERVICE_UUID, ignoreCase = true)
             } == true
             if (!advertisesGlucose && !looksLikeAccuChek(name)) return
-
             stopScan()
             currentName = name.ifBlank { "Accu-Chek Instant" }
             AccuChekStatusStore.rememberDevice(this@AccuChekBleService, result.device.address, currentName)
@@ -159,16 +156,18 @@ class AccuChekBleService : Service() {
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
-                updateState("Bağlandı; Glucose Service aranıyor")
-                runCatching { gatt.discoverServices() }
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                updateState("Bağlantı koptu; yeniden bağlanacak")
-                runCatching { gatt.close() }
-                if (this@AccuChekBleService.gatt === gatt) this@AccuChekBleService.gatt = null
-                handler.postDelayed({ connectOrScan() }, RECONNECT_DELAY_MS)
-            } else if (status != BluetoothGatt.GATT_SUCCESS) {
-                updateState("Bluetooth bağlantı hatası: $status")
+            when {
+                newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS -> {
+                    updateState("Bağlandı; Glucose Service aranıyor")
+                    runCatching { gatt.discoverServices() }
+                }
+                newState == BluetoothProfile.STATE_DISCONNECTED -> {
+                    updateState("Bağlantı koptu; yeniden bağlanacak")
+                    runCatching { gatt.close() }
+                    if (this@AccuChekBleService.gatt === gatt) this@AccuChekBleService.gatt = null
+                    handler.postDelayed({ connectOrScan() }, RECONNECT_DELAY_MS)
+                }
+                status != BluetoothGatt.GATT_SUCCESS -> updateState("Bluetooth bağlantı hatası: $status")
             }
         }
 
@@ -210,31 +209,20 @@ class AccuChekBleService : Service() {
                 return
             }
             val service = gatt.getService(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_SERVICE_UUID)) ?: return
-            val characteristicUuid = descriptor.characteristic.uuid.toString()
-            when {
-                characteristicUuid.equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true) -> {
+            when (descriptor.characteristic.uuid.toString()) {
+                BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID -> {
                     val context = service.getCharacteristic(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID))
                     if (context != null) {
                         updateState("Bağlı; ölçüm bağlamı açılıyor")
                         enableCcc(gatt, context, indicate = false)
-                    } else {
-                        enableRacpOrFinish(gatt)
-                    }
+                    } else enableRacpOrFinish(gatt)
                 }
-                characteristicUuid.equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID, true) -> {
-                    enableRacpOrFinish(gatt)
-                }
-                characteristicUuid.equals(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID, true) -> {
-                    requestAllStoredRecords(gatt)
-                }
+                BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID -> enableRacpOrFinish(gatt)
+                BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID -> requestStoredRecords(gatt)
             }
         }
 
-        override fun onCharacteristicWrite(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
+        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             if (characteristic.uuid.toString().equals(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID, true)) {
                 updateState(
                     if (status == BluetoothGatt.GATT_SUCCESS) "Bağlı; geçmiş ve canlı ölçümler senkronize ediliyor"
@@ -250,17 +238,14 @@ class AccuChekBleService : Service() {
         if (racp != null) {
             updateState("Bağlı; geçmiş senkronizasyon hazırlanıyor")
             enableCcc(gatt, racp, indicate = true)
-        } else {
-            updateState("Bağlı; canlı şeker ölçümleri bekleniyor")
-        }
+        } else updateState("Bağlı; canlı şeker ölçümleri bekleniyor")
     }
 
     private fun handleCharacteristic(uuid: UUID, value: ByteArray) {
         when {
-            uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true) ->
-                handleMeasurement(value)
-            uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID, true) ->
-                handleMeasurementContext(value)
+            uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true) -> handleMeasurement(value)
+            uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID, true) -> handleMeasurementContext(value)
+            uuid.toString().equals(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID, true) -> handleRacp(value)
         }
     }
 
@@ -283,18 +268,13 @@ class AccuChekBleService : Service() {
             context = hint.toMeasurementContext(),
             importedAtMs = System.currentTimeMillis()
         )
-        val inserted = BloodGlucoseStore.addIfAbsent(this, reading)
-        if (!inserted) return
+        if (!BloodGlucoseStore.addIfAbsent(this, reading)) return
 
         val old = AccuChekStatusStore.load(this)
         AccuChekStatusStore.save(
             this,
             old.copy(
-                state = if (parsed.contextFollows) {
-                    "Bağlı; yeni ölçüm ve bağlam bekleniyor"
-                } else {
-                    "Bağlı; yeni ölçüm doğrulama bekliyor"
-                },
+                state = if (parsed.contextFollows) "Bağlı; yeni ölçüm ve bağlam bekleniyor" else "Bağlı; yeni ölçüm doğrulama bekliyor",
                 deviceName = currentName,
                 lastReadingAtMs = parsed.measuredAtMs,
                 lastValueMgDl = mgDl,
@@ -313,11 +293,20 @@ class AccuChekBleService : Service() {
             sequenceNumber = parsed.sequenceNumber,
             measurementContext = parsed.toMeasurementContext()
         ) ?: return
-
         if (updated.ownership == BloodGlucoseReading.Ownership.UNCONFIRMED) {
             GlucoseOwnershipNotification.show(this, updated)
         }
         updateState("Bağlı; ölçüm bağlamı alındı, doğrulama bekliyor")
+    }
+
+    private fun handleRacp(value: ByteArray) {
+        val response = runCatching { BleGlucoseRacp.parseResponse(value) }.getOrNull() ?: return
+        when {
+            response.success -> updateState("Bağlı; geçmiş senkronizasyon tamamlandı")
+            response.noRecordsFound -> updateState("Bağlı; yeni geçmiş ölçümü yok")
+            response.responseCode != null -> updateState("Bağlı; geçmiş senkronizasyon yanıtı: ${response.responseCode}")
+            response.numberOfRecords != null -> updateState("Bağlı; ${response.numberOfRecords} geçmiş ölçüm bulundu")
+        }
     }
 
     private fun enableCcc(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, indicate: Boolean) {
@@ -342,11 +331,17 @@ class AccuChekBleService : Service() {
         }
     }
 
-    private fun requestAllStoredRecords(gatt: BluetoothGatt) {
+    private fun requestStoredRecords(gatt: BluetoothGatt) {
         if (!permissionsReady()) return
         val service = gatt.getService(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_SERVICE_UUID)) ?: return
         val racp = service.getCharacteristic(UUID.fromString(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID)) ?: return
-        val command = byteArrayOf(0x01, 0x01) // Report Stored Records / All records
+        val deviceId = AccuChekStatusStore.savedAddress(this)
+        val lastSequence = BloodGlucoseStore.latestSequence(this, deviceId)
+        val command = if (lastSequence != null && lastSequence < 0xFFFF) {
+            BleGlucoseRacp.reportFromSequenceCommand(lastSequence + 1)
+        } else {
+            BleGlucoseRacp.reportAllRecordsCommand()
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             gatt.writeCharacteristic(racp, command, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
         } else {
@@ -366,13 +361,11 @@ class AccuChekBleService : Service() {
         runCatching { old.close() }
     }
 
-    private fun permissionsReady(): Boolean {
-        return if (Build.VERSION.SDK_INT >= 31) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        }
+    private fun permissionsReady(): Boolean = if (Build.VERSION.SDK_INT >= 31) {
+        ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    } else {
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun looksLikeAccuChek(name: String): Boolean {
@@ -406,7 +399,6 @@ class AccuChekBleService : Service() {
     }
 }
 
-/** Keeps schedule matching out of the BLE transport layer. */
 private object GlucoseScheduleEngineBridge {
     fun matchCheckpoint(context: android.content.Context, measuredAtMs: Long): com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint? {
         val planned = GlucoseScheduleCoordinator.plannedCheckpoints(context)
