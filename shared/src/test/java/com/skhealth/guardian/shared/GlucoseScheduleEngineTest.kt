@@ -20,6 +20,17 @@ class GlucoseScheduleEngineTest {
     }
 
     @Test
+    fun `midday target is five hours after breakfast start`() {
+        val morningPostMealMedicationAt = 8L * 60L * 60_000L + 30L * 60_000L // 08:30
+
+        val target = GlucoseScheduleEngine.middayTargetFromMorningPostMealMedication(
+            morningPostMealMedicationAt
+        )
+
+        assertEquals(13L * 60L * 60_000L, target) // 13:00
+    }
+
+    @Test
     fun `dinner medication follows same meal start rule`() {
         val medicationTakenAt = 20L * 60L * 60_000L + 15L * 60_000L // 20:15
         val target = GlucoseScheduleEngine.postMealTargetFromPostMealMedication(medicationTakenAt)
@@ -28,7 +39,26 @@ class GlucoseScheduleEngineTest {
     }
 
     @Test
-    fun `medication derived checkpoints are restricted to breakfast and dinner post meal`() {
+    fun `morning first group and Toujeo can anchor measurement-time checkpoints`() {
+        val morning = GlucoseScheduleEngine.checkpointAtMedicationTime(
+            GlucoseScheduleEngine.Checkpoint.MORNING_FASTING,
+            8L * 60L * 60_000L
+        )
+        val bedtime = GlucoseScheduleEngine.checkpointAtMedicationTime(
+            GlucoseScheduleEngine.Checkpoint.BEDTIME,
+            23L * 60L * 60_000L
+        )
+
+        assertEquals(GlucoseScheduleEngine.Checkpoint.MORNING_FASTING, morning.checkpoint)
+        assertEquals(8L * 60L * 60_000L, morning.targetAtMs)
+        assertEquals(GlucoseScheduleEngine.Checkpoint.BEDTIME, bedtime.checkpoint)
+        assertEquals(23L * 60L * 60_000L, bedtime.targetAtMs)
+        assertTrue(morning.inferredFromMedication)
+        assertTrue(bedtime.inferredFromMedication)
+    }
+
+    @Test
+    fun `medication derived checkpoints are restricted to intended checkpoint types`() {
         val breakfast = GlucoseScheduleEngine.postMealCheckpointFromMedication(
             GlucoseScheduleEngine.Checkpoint.BREAKFAST_POST_MEAL,
             1_000_000L
@@ -39,6 +69,17 @@ class GlucoseScheduleEngineTest {
         try {
             GlucoseScheduleEngine.postMealCheckpointFromMedication(
                 GlucoseScheduleEngine.Checkpoint.MIDDAY,
+                1_000_000L
+            )
+        } catch (_: IllegalArgumentException) {
+            failed = true
+        }
+        assertTrue(failed)
+
+        failed = false
+        try {
+            GlucoseScheduleEngine.checkpointAtMedicationTime(
+                GlucoseScheduleEngine.Checkpoint.DINNER_POST_MEAL,
                 1_000_000L
             )
         } catch (_: IllegalArgumentException) {
