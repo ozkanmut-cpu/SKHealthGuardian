@@ -1,4 +1,4 @@
-name: Android Build
+name: Orko Takip Android Build
 
 on:
   push:
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    name: Test and build mobile and wear APKs
+    name: Test and build Orko Takip mobile and wear APKs
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -53,7 +53,7 @@ jobs:
         if: always() && hashFiles('mobile/build/outputs/apk/debug/*.apk') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: SKHealthGuardian-Mobile-Debug
+          name: OrkoTakip-Mobile-Debug
           path: mobile/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -62,7 +62,7 @@ jobs:
         if: always() && hashFiles('wear/build/outputs/apk/debug/*.apk') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: SKHealthGuardian-Wear-Debug
+          name: OrkoTakip-Wear-Debug
           path: wear/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
