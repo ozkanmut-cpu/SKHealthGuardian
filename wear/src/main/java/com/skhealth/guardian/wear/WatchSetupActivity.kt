@@ -63,10 +63,10 @@ class WatchSetupActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             addView(wearIcon(WearIcon.WATCH, blue, if (compact) 24 else 28), LinearLayout.LayoutParams(dp(if (compact) 28 else 32), dp(if (compact) 28 else 32)))
-            addView(label("SK Guardian", if (compact) 17f else 19f, text, true).apply { setPadding(dp(7), 0, 0, 0) })
+            addView(label("Orko Takip", if (compact) 17f else 19f, text, true).apply { setPadding(dp(7), 0, 0, 0) })
         }
         root.addView(titleRow)
-        root.addView(label("Sağlık izleme", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(2), 0, dp(8)) })
+        root.addView(label("Sağlık takibi", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(2), 0, dp(8)) })
 
         val statusCard = card().apply { gravity = Gravity.CENTER_HORIZONTAL }
         val statusRow = LinearLayout(this).apply {
