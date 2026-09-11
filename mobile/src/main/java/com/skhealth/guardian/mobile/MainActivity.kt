@@ -130,17 +130,10 @@ class MainActivity : Activity() {
         }
         addView(brandBadge, LinearLayout.LayoutParams(dp(44), dp(44)).apply { rightMargin = dp(12) })
 
-        val labels = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        labels.addView(UiStyle.text(this@MainActivity, "Orko Takip", 22.5f, UiStyle.TEXT, true))
-        labels.addView(
-            UiStyle.text(this@MainActivity, "Sağlık takip ve alarm merkezi", 12.5f, UiStyle.MUTED).apply {
-                setPadding(0, dp(4), 0, 0)
-            }
+        addView(
+            UiStyle.text(this@MainActivity, "Orko Takip", 22.5f, UiStyle.TEXT, true),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
-        addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
 
     private fun applyStatusBarInset(view: View) {
