@@ -91,6 +91,7 @@ object GlucoseScheduleCoordinator {
             .edit()
             .putLong(KEY_MORNING_FIRST_GROUP_AT, takenAtMs)
             .apply()
+        refreshReminders(context)
     }
 
     fun onMorningPostMealMedicationTaken(context: Context, takenAtMs: Long = System.currentTimeMillis()): Long {
@@ -102,6 +103,7 @@ object GlucoseScheduleCoordinator {
             .putLong(KEY_BREAKFAST_TARGET_AT, breakfastTarget)
             .putLong(KEY_MIDDAY_TARGET_AT, middayTarget)
             .apply()
+        refreshReminders(context)
         return breakfastTarget
     }
 
@@ -112,6 +114,7 @@ object GlucoseScheduleCoordinator {
             .putLong(KEY_DINNER_MED_AT, takenAtMs)
             .putLong(KEY_DINNER_TARGET_AT, target)
             .apply()
+        refreshReminders(context)
         return target
     }
 
@@ -120,6 +123,7 @@ object GlucoseScheduleCoordinator {
             .edit()
             .putLong(KEY_TOUJEO_AT, takenAtMs)
             .apply()
+        refreshReminders(context)
     }
 
     fun load(context: Context): MedicationDerivedTargets {
@@ -173,6 +177,10 @@ object GlucoseScheduleCoordinator {
                 )
             }
         }.sortedBy { it.targetAtMs }
+    }
+
+    fun refreshReminders(context: Context) {
+        runCatching { GlucoseReminderReceiver.reschedule(context) }
     }
 
     /** Backwards-compatible alias for callers that only need the post-meal pair. */
