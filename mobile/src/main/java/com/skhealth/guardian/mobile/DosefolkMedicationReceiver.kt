@@ -27,11 +27,11 @@ class DosefolkMedicationReceiver : BroadcastReceiver() {
 
         if (eventId.isBlank() || takenAtMs <= 0L) return
         if (scheduledDate != LocalDate.now().toString()) return
-        if (!markIfNew(context, eventId)) return
 
         val anchor = runCatching {
             GlucoseScheduleCoordinator.MedicationAnchor.valueOf(anchorName)
         }.getOrNull() ?: return
+        if (!markIfNew(context, eventId)) return
 
         GlucoseScheduleCoordinator.onMedicationTaken(
             context = context,
@@ -39,6 +39,7 @@ class DosefolkMedicationReceiver : BroadcastReceiver() {
             takenAtMs = takenAtMs,
             scheduledDate = scheduledDate
         )
+        DosefolkBridgeStatusStore.markReceived(context, eventId, anchor.name, takenAtMs)
     }
 
     private fun markIfNew(context: Context, eventId: String): Boolean {
@@ -46,7 +47,7 @@ class DosefolkMedicationReceiver : BroadcastReceiver() {
         val current = prefs.getStringSet(KEY_EVENT_IDS, emptySet()).orEmpty().toMutableSet()
         if (eventId in current) return false
         current += eventId
-        val bounded = current.takeLast(MAX_EVENT_IDS).toSet()
+        val bounded = current.toList().takeLast(MAX_EVENT_IDS).toSet()
         prefs.edit().putStringSet(KEY_EVENT_IDS, bounded).apply()
         return true
     }
