@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
-    <application android:label="SK Health Guardian Watch" android:allowBackup="false">
+    <application android:label="Orko Takip" android:allowBackup="false">
         <activity android:name=".WearAlarmActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true" />
         <activity android:name=".WatchSetupActivity" android:exported="true">
             <intent-filter>
