@@ -77,6 +77,10 @@ class DevicesActivity : Activity() {
                 )
             }
         ), UiStyle.sectionParams(this))
+
+        root.addView(UiStyle.iconButton(this, SkIcon.CLOCK, "Şeker geçmişi ve doğrulama").apply {
+            setOnClickListener { startActivity(Intent(this@DevicesActivity, GlucoseHistoryActivity::class.java)) }
+        }, UiStyle.sectionParams(this, 10))
     }
 
     private fun deviceCard(
