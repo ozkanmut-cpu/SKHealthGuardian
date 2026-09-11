@@ -29,6 +29,7 @@
         <activity android:name=".DeliveryLogActivity" android:exported="false" />
         <activity android:name=".HistoryChartActivity" android:exported="false" />
         <activity android:name=".HistoryActivity" android:exported="false" />
+        <activity android:name=".GlucoseChartActivity" android:exported="false" />
         <activity android:name=".GlucoseHistoryActivity" android:exported="false" />
         <activity android:name=".Pc60Activity" android:exported="false" />
         <activity android:name=".DevicesActivity" android:exported="false" />
