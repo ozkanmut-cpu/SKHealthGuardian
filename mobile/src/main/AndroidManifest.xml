@@ -58,6 +58,11 @@
                 <action android:name="com.dosefolk.action.ORKO_MEDICATION_TAKEN" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".DosefolkBridgeSelfTestReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.dosefolk.action.ORKO_BRIDGE_SELF_TEST" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".CallStateReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.PHONE_STATE"/></intent-filter>
         </receiver>
