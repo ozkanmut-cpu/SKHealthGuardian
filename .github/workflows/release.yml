@@ -1,4 +1,4 @@
-name: Release APKs
+name: Orko Takip Release APKs
 
 # Release trigger: v0.8.1
 on:
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   release:
-    name: Test, build and publish prerelease
+    name: Test, build and publish Orko Takip prerelease
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -88,8 +88,8 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
-          cp mobile/build/outputs/apk/debug/mobile-debug.apk "SKHealthGuardian-mobile-${TAG}-debug.apk"
-          cp wear/build/outputs/apk/debug/wear-debug.apk "SKHealthGuardian-wear-${TAG}-debug.apk"
+          cp mobile/build/outputs/apk/debug/mobile-debug.apk "OrkoTakip-mobile-${TAG}-debug.apk"
+          cp wear/build/outputs/apk/debug/wear-debug.apk "OrkoTakip-wear-${TAG}-debug.apk"
 
       - name: Create GitHub prerelease
         if: steps.existing.outputs.exists != 'true'
@@ -99,9 +99,9 @@ jobs:
         shell: bash
         run: |
           gh release create "$TAG" \
-            "SKHealthGuardian-mobile-${TAG}-debug.apk" \
-            "SKHealthGuardian-wear-${TAG}-debug.apk" \
+            "OrkoTakip-mobile-${TAG}-debug.apk" \
+            "OrkoTakip-wear-${TAG}-debug.apk" \
             --target "$GITHUB_SHA" \
-            --title "SK Health Guardian $TAG" \
+            --title "Orko Takip $TAG" \
             --prerelease \
             --generate-notes
