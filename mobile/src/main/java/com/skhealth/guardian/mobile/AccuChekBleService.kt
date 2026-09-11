@@ -22,6 +22,7 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.skhealth.guardian.shared.BleGlucoseContextParser
 import com.skhealth.guardian.shared.BleGlucoseMeasurementParser
 import com.skhealth.guardian.shared.BloodGlucoseReading
 import java.util.UUID
@@ -29,9 +30,8 @@ import java.util.UUID
 /**
  * Direct BLE client for standards-based glucose meters such as Accu-Chek Instant.
  *
- * The Android system owns secure pairing/passkey UI. No meter PIN is embedded in
- * the app. Every imported result is stored UNCONFIRMED until the user attributes
- * it to Orko or another person.
+ * Android owns secure pairing/passkey UI. No meter PIN is embedded in the app.
+ * Every imported result is stored UNCONFIRMED until explicitly attributed.
  */
 class AccuChekBleService : Service() {
     private val handler = Handler(Looper.getMainLooper())
@@ -167,6 +167,8 @@ class AccuChekBleService : Service() {
                 runCatching { gatt.close() }
                 if (this@AccuChekBleService.gatt === gatt) this@AccuChekBleService.gatt = null
                 handler.postDelayed({ connectOrScan() }, RECONNECT_DELAY_MS)
+            } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                updateState("Bluetooth bağlantı hatası: $status")
             }
         }
 
@@ -207,17 +209,24 @@ class AccuChekBleService : Service() {
                 updateState("BLE bildirim ayarı başarısız: $status")
                 return
             }
+            val service = gatt.getService(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_SERVICE_UUID)) ?: return
             val characteristicUuid = descriptor.characteristic.uuid.toString()
-            if (characteristicUuid.equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true)) {
-                val service = gatt.getService(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_SERVICE_UUID)) ?: return
-                val racp = service.getCharacteristic(UUID.fromString(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID))
-                if (racp != null) {
-                    enableCcc(gatt, racp, indicate = true)
-                } else {
-                    updateState("Bağlı; canlı şeker ölçümleri bekleniyor")
+            when {
+                characteristicUuid.equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true) -> {
+                    val context = service.getCharacteristic(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID))
+                    if (context != null) {
+                        updateState("Bağlı; ölçüm bağlamı açılıyor")
+                        enableCcc(gatt, context, indicate = false)
+                    } else {
+                        enableRacpOrFinish(gatt)
+                    }
                 }
-            } else if (characteristicUuid.equals(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID, true)) {
-                requestAllStoredRecords(gatt)
+                characteristicUuid.equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID, true) -> {
+                    enableRacpOrFinish(gatt)
+                }
+                characteristicUuid.equals(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID, true) -> {
+                    requestAllStoredRecords(gatt)
+                }
             }
         }
 
@@ -235,8 +244,27 @@ class AccuChekBleService : Service() {
         }
     }
 
+    private fun enableRacpOrFinish(gatt: BluetoothGatt) {
+        val service = gatt.getService(UUID.fromString(BleGlucoseMeasurementParser.GLUCOSE_SERVICE_UUID)) ?: return
+        val racp = service.getCharacteristic(UUID.fromString(BleGlucoseMeasurementParser.RECORD_ACCESS_CONTROL_POINT_UUID))
+        if (racp != null) {
+            updateState("Bağlı; geçmiş senkronizasyon hazırlanıyor")
+            enableCcc(gatt, racp, indicate = true)
+        } else {
+            updateState("Bağlı; canlı şeker ölçümleri bekleniyor")
+        }
+    }
+
     private fun handleCharacteristic(uuid: UUID, value: ByteArray) {
-        if (!uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true)) return
+        when {
+            uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_UUID, true) ->
+                handleMeasurement(value)
+            uuid.toString().equals(BleGlucoseMeasurementParser.GLUCOSE_MEASUREMENT_CONTEXT_UUID, true) ->
+                handleMeasurementContext(value)
+        }
+    }
+
+    private fun handleMeasurement(value: ByteArray) {
         val parsed = runCatching { BleGlucoseMeasurementParser.parse(value) }
             .onFailure { updateState("Geçersiz şeker paketi: ${it.javaClass.simpleName}") }
             .getOrNull() ?: return
@@ -262,13 +290,34 @@ class AccuChekBleService : Service() {
         AccuChekStatusStore.save(
             this,
             old.copy(
-                state = "Bağlı; yeni ölçüm doğrulama bekliyor",
+                state = if (parsed.contextFollows) {
+                    "Bağlı; yeni ölçüm ve bağlam bekleniyor"
+                } else {
+                    "Bağlı; yeni ölçüm doğrulama bekliyor"
+                },
                 deviceName = currentName,
                 lastReadingAtMs = parsed.measuredAtMs,
                 lastValueMgDl = mgDl,
                 pendingOwnershipCount = BloodGlucoseStore.pendingOwnership(this).size
             )
         )
+    }
+
+    private fun handleMeasurementContext(value: ByteArray) {
+        val parsed = runCatching { BleGlucoseContextParser.parse(value) }
+            .onFailure { updateState("Geçersiz şeker bağlamı: ${it.javaClass.simpleName}") }
+            .getOrNull() ?: return
+        val updated = BloodGlucoseStore.updateContextBySequence(
+            context = this,
+            deviceId = AccuChekStatusStore.savedAddress(this),
+            sequenceNumber = parsed.sequenceNumber,
+            measurementContext = parsed.toMeasurementContext()
+        ) ?: return
+
+        if (updated.ownership == BloodGlucoseReading.Ownership.UNCONFIRMED) {
+            GlucoseOwnershipNotification.show(this, updated)
+        }
+        updateState("Bağlı; ölçüm bağlamı alındı, doğrulama bekliyor")
     }
 
     private fun enableCcc(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, indicate: Boolean) {
