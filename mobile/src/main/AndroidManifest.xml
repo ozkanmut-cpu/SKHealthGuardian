@@ -53,6 +53,11 @@
         <receiver android:name=".AlarmEscalationReceiver" android:exported="false" />
         <receiver android:name=".GlucoseOwnershipReceiver" android:exported="false" />
         <receiver android:name=".GlucoseReminderReceiver" android:exported="false" />
+        <receiver android:name=".DosefolkMedicationReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.dosefolk.action.ORKO_MEDICATION_TAKEN" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".CallStateReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.PHONE_STATE"/></intent-filter>
         </receiver>
