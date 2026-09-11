@@ -26,7 +26,8 @@ class SettingsHubActivity : Activity() {
         root.addView(UiStyle.sectionTitle(this, "İzleme"))
         root.addView(sectionCard(
             HubItem(SkIcon.HEART, "Alarm ayarları", "SpO₂, nabız ve doğrulama süreleri", MeasurementSettingsActivity::class.java),
-            HubItem(SkIcon.WATCH, "Cihazlar", "Galaxy Watch ve PC-60FW bağlantıları", DevicesActivity::class.java)
+            HubItem(SkIcon.CLOCK, "Kan şekeri", "Günlük plan, hatırlatma ve sahiplik doğrulaması", GlucoseSettingsActivity::class.java),
+            HubItem(SkIcon.WATCH, "Cihazlar", "Galaxy Watch, PC-60FW ve Accu-Chek bağlantıları", DevicesActivity::class.java)
         ))
 
         root.addView(UiStyle.sectionTitle(this, "Uyarılar"))
