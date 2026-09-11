@@ -5,6 +5,7 @@ import android.content.Context
 data class DosefolkBridgeStatus(
     val lastEventId: String = "",
     val lastAnchor: String = "",
+    val lastOperation: String = "",
     val lastTakenAtMs: Long = 0L,
     val lastReceivedAtMs: Long = 0L,
     val lastSelfTestToken: String = "",
@@ -16,6 +17,7 @@ object DosefolkBridgeStatusStore {
     private const val PREFS = "dosefolk_bridge_status"
     private const val KEY_EVENT_ID = "event_id"
     private const val KEY_ANCHOR = "anchor"
+    private const val KEY_OPERATION = "operation"
     private const val KEY_TAKEN_AT = "taken_at"
     private const val KEY_RECEIVED_AT = "received_at"
     private const val KEY_SELF_TEST_TOKEN = "self_test_token"
@@ -27,6 +29,7 @@ object DosefolkBridgeStatusStore {
         return DosefolkBridgeStatus(
             lastEventId = p.getString(KEY_EVENT_ID, "").orEmpty(),
             lastAnchor = p.getString(KEY_ANCHOR, "").orEmpty(),
+            lastOperation = p.getString(KEY_OPERATION, "").orEmpty(),
             lastTakenAtMs = p.getLong(KEY_TAKEN_AT, 0L),
             lastReceivedAtMs = p.getLong(KEY_RECEIVED_AT, 0L),
             lastSelfTestToken = p.getString(KEY_SELF_TEST_TOKEN, "").orEmpty(),
@@ -35,11 +38,18 @@ object DosefolkBridgeStatusStore {
         )
     }
 
-    fun markReceived(context: Context, eventId: String, anchor: String, takenAtMs: Long) {
+    fun markReceived(
+        context: Context,
+        eventId: String,
+        anchor: String,
+        takenAtMs: Long,
+        operation: String
+    ) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_EVENT_ID, eventId)
             .putString(KEY_ANCHOR, anchor)
+            .putString(KEY_OPERATION, operation)
             .putLong(KEY_TAKEN_AT, takenAtMs)
             .putLong(KEY_RECEIVED_AT, System.currentTimeMillis())
             .apply()
