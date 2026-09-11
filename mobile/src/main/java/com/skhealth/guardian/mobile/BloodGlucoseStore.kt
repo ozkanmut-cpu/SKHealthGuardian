@@ -43,17 +43,23 @@ object BloodGlucoseStore {
         readingId: String,
         ownership: BloodGlucoseReading.Ownership,
         confirmedAtMs: Long = System.currentTimeMillis()
-    ): BloodGlucoseReading? = synchronized(lock) {
+    ): BloodGlucoseReading? {
         require(ownership != BloodGlucoseReading.Ownership.UNCONFIRMED) {
             "Ownership confirmation requires ORKO or OTHER_PERSON"
         }
-        val rows = readRows(context).toMutableList()
-        val index = rows.indexOfFirst { it.id == readingId }
-        if (index < 0) return@synchronized null
-        val updated = rows[index].confirmOwnership(ownership, confirmedAtMs)
-        rows[index] = updated
-        writeRows(context, rows)
-        updated
+        val updated = synchronized(lock) {
+            val rows = readRows(context).toMutableList()
+            val index = rows.indexOfFirst { it.id == readingId }
+            if (index < 0) return@synchronized null
+            val row = rows[index].confirmOwnership(ownership, confirmedAtMs)
+            rows[index] = row
+            writeRows(context, rows)
+            row
+        }
+        if (updated != null) {
+            GlucoseScheduleCoordinator.refreshReminders(context)
+        }
+        return updated
     }
 
     /** Applies standardized BLE Measurement Context to the matching meter record. */
