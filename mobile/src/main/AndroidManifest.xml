@@ -31,6 +31,7 @@
         <activity android:name=".HistoryActivity" android:exported="false" />
         <activity android:name=".GlucoseChartActivity" android:exported="false" />
         <activity android:name=".GlucoseHistoryActivity" android:exported="false" />
+        <activity android:name=".GlucoseSettingsActivity" android:exported="false" />
         <activity android:name=".Pc60Activity" android:exported="false" />
         <activity android:name=".DevicesActivity" android:exported="false" />
         <activity android:name=".SettingsHubActivity" android:exported="false" />
