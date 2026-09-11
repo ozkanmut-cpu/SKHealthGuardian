@@ -122,7 +122,7 @@ class MainActivity : Activity() {
                 ImageView(this@MainActivity).apply {
                     setImageResource(R.mipmap.ic_launcher)
                     scaleType = ImageView.ScaleType.FIT_CENTER
-                    contentDescription = "SK Health Guardian"
+                    contentDescription = "Orko Takip"
                     setPadding(dp(4), dp(4), dp(4), dp(4))
                 },
                 LinearLayout.LayoutParams(dp(36), dp(36))
@@ -134,9 +134,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        labels.addView(UiStyle.text(this@MainActivity, "SK Health Guardian", 22.5f, UiStyle.TEXT, true))
+        labels.addView(UiStyle.text(this@MainActivity, "Orko Takip", 22.5f, UiStyle.TEXT, true))
         labels.addView(
-            UiStyle.text(this@MainActivity, "Sağlık izleme ve alarm merkezi", 12.5f, UiStyle.MUTED).apply {
+            UiStyle.text(this@MainActivity, "Sağlık takip ve alarm merkezi", 12.5f, UiStyle.MUTED).apply {
                 setPadding(0, dp(4), 0, 0)
             }
         )
