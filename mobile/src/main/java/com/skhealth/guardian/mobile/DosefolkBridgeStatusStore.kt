@@ -7,7 +7,9 @@ data class DosefolkBridgeStatus(
     val lastAnchor: String = "",
     val lastTakenAtMs: Long = 0L,
     val lastReceivedAtMs: Long = 0L,
-    val lastOperation: String = "SET"
+    val lastSelfTestToken: String = "",
+    val lastSelfTestSentAtMs: Long = 0L,
+    val lastSelfTestReceivedAtMs: Long = 0L
 )
 
 object DosefolkBridgeStatusStore {
@@ -16,7 +18,9 @@ object DosefolkBridgeStatusStore {
     private const val KEY_ANCHOR = "anchor"
     private const val KEY_TAKEN_AT = "taken_at"
     private const val KEY_RECEIVED_AT = "received_at"
-    private const val KEY_OPERATION = "operation"
+    private const val KEY_SELF_TEST_TOKEN = "self_test_token"
+    private const val KEY_SELF_TEST_SENT_AT = "self_test_sent_at"
+    private const val KEY_SELF_TEST_RECEIVED_AT = "self_test_received_at"
 
     fun load(context: Context): DosefolkBridgeStatus {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -25,24 +29,28 @@ object DosefolkBridgeStatusStore {
             lastAnchor = p.getString(KEY_ANCHOR, "").orEmpty(),
             lastTakenAtMs = p.getLong(KEY_TAKEN_AT, 0L),
             lastReceivedAtMs = p.getLong(KEY_RECEIVED_AT, 0L),
-            lastOperation = p.getString(KEY_OPERATION, "SET").orEmpty().ifBlank { "SET" }
+            lastSelfTestToken = p.getString(KEY_SELF_TEST_TOKEN, "").orEmpty(),
+            lastSelfTestSentAtMs = p.getLong(KEY_SELF_TEST_SENT_AT, 0L),
+            lastSelfTestReceivedAtMs = p.getLong(KEY_SELF_TEST_RECEIVED_AT, 0L)
         )
     }
 
-    fun markReceived(
-        context: Context,
-        eventId: String,
-        anchor: String,
-        takenAtMs: Long,
-        operation: String = "SET"
-    ) {
+    fun markReceived(context: Context, eventId: String, anchor: String, takenAtMs: Long) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_EVENT_ID, eventId)
             .putString(KEY_ANCHOR, anchor)
             .putLong(KEY_TAKEN_AT, takenAtMs)
             .putLong(KEY_RECEIVED_AT, System.currentTimeMillis())
-            .putString(KEY_OPERATION, operation)
+            .apply()
+    }
+
+    fun markSelfTestReceived(context: Context, token: String, sentAtMs: Long) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SELF_TEST_TOKEN, token)
+            .putLong(KEY_SELF_TEST_SENT_AT, sentAtMs)
+            .putLong(KEY_SELF_TEST_RECEIVED_AT, System.currentTimeMillis())
             .apply()
     }
 }
