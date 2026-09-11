@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import androidx.core.content.ContextCompat
 
 class DevicesActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,7 +53,29 @@ class DevicesActivity : Activity() {
                 SkIcon.BATTERY to ("Pil seviyesi" to (pc.batteryLevel?.let { "%$it" } ?: "—")),
                 SkIcon.CLOCK to ("Son veri" to if (pc.lastPacketAt > 0) ageText((now - pc.lastPacketAt).coerceAtLeast(0L)) else "—")
             ),
-            { startActivity(Intent(this, Pc60Activity::class.java)) }
+            actionLabel = "Cihaz ayrıntılarını aç",
+            action = { startActivity(Intent(this, Pc60Activity::class.java)) }
+        ), UiStyle.sectionParams(this))
+
+        val glucose = AccuChekStatusStore.load(this)
+        val glucoseConnected = glucose.state.startsWith("Bağlı", ignoreCase = true)
+        root.addView(deviceCard(
+            SkIcon.DEVICE_INFO,
+            glucose.deviceName.ifBlank { "Accu-Chek Instant" },
+            glucoseConnected,
+            listOf(
+                SkIcon.LINK to ("Durum" to glucose.state),
+                SkIcon.CLOCK to ("Son şeker" to glucose.lastValueMgDl?.let { "$it mg/dL" } ?: "—"),
+                SkIcon.STATUS_NONE to ("Doğrulama bekleyen" to glucose.pendingOwnershipCount.toString()),
+                SkIcon.CLOCK to ("Son veri" to glucose.lastReadingAtMs?.let { ageText((now - it).coerceAtLeast(0L)) } ?: "—")
+            ),
+            actionLabel = if (AccuChekStatusStore.savedAddress(this).isBlank()) "Accu-Chek bağla" else "Yeniden tara / bağlan",
+            action = {
+                ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, AccuChekBleService::class.java).setAction(AccuChekBleService.ACTION_RESCAN)
+                )
+            }
         ), UiStyle.sectionParams(this))
     }
 
@@ -61,6 +84,7 @@ class DevicesActivity : Activity() {
         title: String,
         connected: Boolean,
         rows: List<Pair<SkIcon, Pair<String, String>>>,
+        actionLabel: String? = null,
         action: (() -> Unit)?
     ): LinearLayout = UiStyle.card(this, 17).apply {
         val header = LinearLayout(this@DevicesActivity).apply {
@@ -96,7 +120,7 @@ class DevicesActivity : Activity() {
                 isFocusable = true
                 setOnClickListener { action() }
                 addView(UiStyle.icon(this@DevicesActivity, SkIcon.DEVICE_INFO, 21, UiStyle.BLUE))
-                addView(UiStyle.text(this@DevicesActivity, "Cihaz ayrıntılarını aç", 15f, UiStyle.TEXT, true).apply { setPadding(UiStyle.dp(this@DevicesActivity, 8), 0, 0, 0) })
+                addView(UiStyle.text(this@DevicesActivity, actionLabel ?: "Cihaz ayrıntılarını aç", 15f, UiStyle.TEXT, true).apply { setPadding(UiStyle.dp(this@DevicesActivity, 8), 0, 0, 0) })
             }
             addView(button, UiStyle.sectionParams(this@DevicesActivity, 10))
         }
