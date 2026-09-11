@@ -43,8 +43,19 @@ class GlucoseSettingsActivity : Activity() {
                 bridge.lastReceivedAtMs > 0L
             ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 10), 0, 0) }
         )
+        val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
+        if (bridge.lastSelfTestReceivedAtMs > 0L) {
+            bridgeCard.addView(
+                UiStyle.text(
+                    this,
+                    "✓ Son bağlantı testi alındı • ${fmt.format(Date(bridge.lastSelfTestReceivedAtMs))}",
+                    12.5f,
+                    UiStyle.GREEN,
+                    true
+                ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 7), 0, 0) }
+            )
+        }
         if (bridge.lastReceivedAtMs > 0L) {
-            val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
             val anchorLabel = when (bridge.lastAnchor) {
                 GlucoseScheduleCoordinator.MedicationAnchor.MORNING_FIRST_GROUP.name -> "Sabah ilk ilaç grubu"
                 GlucoseScheduleCoordinator.MedicationAnchor.MORNING_SECOND_POST_MEAL_GROUP.name -> "Sabah ikinci tok ilaç grubu"
