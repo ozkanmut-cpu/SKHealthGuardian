@@ -24,22 +24,37 @@ class DosefolkMedicationReceiver : BroadcastReceiver() {
         val takenAtMs = intent.getLongExtra(EXTRA_TAKEN_AT_MS, 0L)
         val scheduledDate = intent.getStringExtra(EXTRA_SCHEDULED_DATE).orEmpty()
             .ifBlank { LocalDate.now().toString() }
+        val operation = intent.getStringExtra(EXTRA_OPERATION).orEmpty().ifBlank { OP_SET }
 
         if (eventId.isBlank() || takenAtMs <= 0L) return
         if (scheduledDate != LocalDate.now().toString()) return
+        if (operation != OP_SET && operation != OP_CLEAR) return
 
         val anchor = runCatching {
             GlucoseScheduleCoordinator.MedicationAnchor.valueOf(anchorName)
         }.getOrNull() ?: return
         if (!markIfNew(context, eventId)) return
 
-        GlucoseScheduleCoordinator.onMedicationTaken(
+        when (operation) {
+            OP_SET -> GlucoseScheduleCoordinator.onMedicationTaken(
+                context = context,
+                anchor = anchor,
+                takenAtMs = takenAtMs,
+                scheduledDate = scheduledDate
+            )
+            OP_CLEAR -> GlucoseScheduleCoordinator.onMedicationCleared(
+                context = context,
+                anchor = anchor,
+                scheduledDate = scheduledDate
+            )
+        }
+        DosefolkBridgeStatusStore.markReceived(
             context = context,
-            anchor = anchor,
+            eventId = eventId,
+            anchor = anchor.name,
             takenAtMs = takenAtMs,
-            scheduledDate = scheduledDate
+            operation = operation
         )
-        DosefolkBridgeStatusStore.markReceived(context, eventId, anchor.name, takenAtMs)
     }
 
     private fun markIfNew(context: Context, eventId: String): Boolean {
@@ -59,6 +74,9 @@ class DosefolkMedicationReceiver : BroadcastReceiver() {
         private const val EXTRA_ANCHOR = "anchor"
         private const val EXTRA_TAKEN_AT_MS = "takenAtMs"
         private const val EXTRA_SCHEDULED_DATE = "scheduledDate"
+        private const val EXTRA_OPERATION = "operation"
+        private const val OP_SET = "SET"
+        private const val OP_CLEAR = "CLEAR"
         private const val PREFS = "dosefolk_bridge"
         private const val KEY_EVENT_IDS = "processed_event_ids"
         private const val MAX_EVENT_IDS = 256
