@@ -22,6 +22,10 @@ class BootReceiver : BroadcastReceiver() {
             AlarmTimelineStore.add(context, "ESCALATION GERİ YÜKLENDİ", "$restored bekleyen alarm telefon yeniden başladıktan sonra yeniden planlandı")
         }
 
+        // Glucose measurement reminders are derived from medication anchors and
+        // confirmed Orko readings, so they can be safely reconstructed after reboot.
+        runCatching { GlucoseReminderReceiver.reschedule(context) }
+
         if (!Pc60StatusStore.monitoringEnabled(context)) return
         val bluetoothReady = Build.VERSION.SDK_INT < 31 ||
             (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
