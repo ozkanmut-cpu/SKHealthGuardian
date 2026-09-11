@@ -6,6 +6,9 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class GlucoseSettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,6 +29,47 @@ class GlucoseSettingsActivity : Activity() {
             )
         )
 
+        val bridge = DosefolkBridgeStatusStore.load(this)
+        val bridgeCard = UiStyle.card(this)
+        bridgeCard.addView(UiStyle.iconLabel(this, SkIcon.LINK, "Dosefolk bağlantısı", UiStyle.PURPLE, UiStyle.TEXT, 22, 18f, true))
+        val bridgeState = if (bridge.lastReceivedAtMs > 0L) "Bağlı • ilaç olayları alınıyor" else "Henüz Dosefolk ilaç olayı alınmadı"
+        bridgeCard.addView(
+            UiStyle.text(
+                this,
+                bridgeState,
+                13f,
+                if (bridge.lastReceivedAtMs > 0L) UiStyle.GREEN else UiStyle.MUTED,
+                bridge.lastReceivedAtMs > 0L
+            ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 10), 0, 0) }
+        )
+        if (bridge.lastReceivedAtMs > 0L) {
+            val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
+            val anchorLabel = when (bridge.lastAnchor) {
+                GlucoseScheduleCoordinator.MedicationAnchor.MORNING_FIRST_GROUP.name -> "Sabah ilk ilaç grubu"
+                GlucoseScheduleCoordinator.MedicationAnchor.MORNING_SECOND_POST_MEAL_GROUP.name -> "Sabah ikinci tok ilaç grubu"
+                GlucoseScheduleCoordinator.MedicationAnchor.EVENING_COMBINED_POST_MEAL_GROUP.name -> "Akşam tok ilaç grubu"
+                GlucoseScheduleCoordinator.MedicationAnchor.BEDTIME_TOUJEO.name -> "Yatmadan önce / Toujeo"
+                else -> "İlaç grubu"
+            }
+            bridgeCard.addView(
+                UiStyle.text(
+                    this,
+                    "Son olay: $anchorLabel • ${fmt.format(Date(bridge.lastTakenAtMs))}",
+                    12.5f,
+                    UiStyle.MUTED
+                ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 7), 0, 0) }
+            )
+        }
+        bridgeCard.addView(
+            UiStyle.text(
+                this,
+                "Dosefolk ilaçların kaynağıdır. Orko Takip yalnızca ölçüm zamanını hesaplamak için ilaç grubunu ve gerçek alınma saatini kullanır; ilaç adı veya dozu bu bağlantıyla aktarılmaz.",
+                12.5f,
+                UiStyle.MUTED
+            ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 8), 0, 0) }
+        )
+        root.addView(bridgeCard)
+
         val rules = UiStyle.card(this)
         rules.addView(UiStyle.iconLabel(this, SkIcon.CLOCK, "Günlük plan", UiStyle.BLUE, UiStyle.TEXT, 22, 18f, true))
         rules.addView(
@@ -44,7 +88,7 @@ class GlucoseSettingsActivity : Activity() {
                 UiStyle.MUTED
             ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 8), 0, 0) }
         )
-        root.addView(rules)
+        root.addView(rules, UiStyle.sectionParams(this))
 
         val reminders = UiStyle.card(this)
         reminders.addView(UiStyle.iconLabel(this, SkIcon.BELL, "Hatırlatmalar", UiStyle.AMBER, UiStyle.TEXT, 22, 18f, true))
