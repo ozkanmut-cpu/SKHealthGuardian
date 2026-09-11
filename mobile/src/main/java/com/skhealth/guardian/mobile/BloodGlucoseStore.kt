@@ -16,13 +16,19 @@ object BloodGlucoseStore {
     private const val MAX = 2_000
     private val lock = Any()
 
-    fun addIfAbsent(context: Context, reading: BloodGlucoseReading): Boolean = synchronized(lock) {
-        val rows = readRows(context).toMutableList()
-        val key = reading.dedupeKey()
-        if (rows.any { it.dedupeKey() == key }) return@synchronized false
-        rows += reading
-        writeRows(context, rows.takeLast(MAX))
-        true
+    fun addIfAbsent(context: Context, reading: BloodGlucoseReading): Boolean {
+        val inserted = synchronized(lock) {
+            val rows = readRows(context).toMutableList()
+            val key = reading.dedupeKey()
+            if (rows.any { it.dedupeKey() == key }) return@synchronized false
+            rows += reading
+            writeRows(context, rows.takeLast(MAX))
+            true
+        }
+        if (inserted && reading.ownership == BloodGlucoseReading.Ownership.UNCONFIRMED) {
+            GlucoseOwnershipNotification.show(context, reading)
+        }
+        return inserted
     }
 
     fun upsert(context: Context, reading: BloodGlucoseReading) = synchronized(lock) {
