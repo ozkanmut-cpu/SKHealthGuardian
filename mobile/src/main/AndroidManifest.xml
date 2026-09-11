@@ -48,6 +48,7 @@
         <receiver android:name=".SmsStatusReceiver" android:exported="false" />
         <receiver android:name=".SmsRetryReceiver" android:exported="false" />
         <receiver android:name=".AlarmEscalationReceiver" android:exported="false" />
+        <receiver android:name=".GlucoseOwnershipReceiver" android:exported="false" />
         <receiver android:name=".CallStateReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.PHONE_STATE"/></intent-filter>
         </receiver>
