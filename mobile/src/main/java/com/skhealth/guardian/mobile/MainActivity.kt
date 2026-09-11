@@ -102,6 +102,7 @@ class MainActivity : Activity() {
 
         addQuickMeasureButton()
         addStatusCard(severity, age, sourceTs)
+        addGlucoseCard(now)
         addDeviceCards(watchConnected, pcConnected, pc60, now)
         addMetricCards(spo2, hr, cfg.spo2LowThreshold, cfg.heartRateHighThreshold)
         addRecentMeasurements(latestValid)
@@ -207,6 +208,103 @@ class MainActivity : Activity() {
             card.addView(UiStyle.text(this, ageText(age), 12f, UiStyle.MUTED).apply { setPadding(dp(48), dp(8), 0, 0) })
         }
         root.addView(card, UiStyle.sectionParams(this, 12))
+    }
+
+    private fun addGlucoseCard(now: Long) {
+        val latest = BloodGlucoseStore.confirmedOrko(this, 1).lastOrNull()
+        val pendingCount = BloodGlucoseStore.pendingOwnership(this, 100).size
+        val next = GlucoseDailyPlan.nextActionable(this, now)
+        val timeFormat = SimpleDateFormat("HH:mm", Locale("tr", "TR"))
+
+        val stateColor = when (next?.state) {
+            GlucoseDailyPlan.State.DUE -> UiStyle.BLUE
+            GlucoseDailyPlan.State.OVERDUE -> UiStyle.AMBER
+            GlucoseDailyPlan.State.UPCOMING -> UiStyle.MUTED
+            GlucoseDailyPlan.State.COMPLETED, null -> UiStyle.GREEN
+        }
+        val stateText = when (next?.state) {
+            GlucoseDailyPlan.State.DUE -> "Şimdi ölçülebilir"
+            GlucoseDailyPlan.State.OVERDUE -> "Ölçüm gecikti"
+            GlucoseDailyPlan.State.UPCOMING -> "Sıradaki ölçüm"
+            GlucoseDailyPlan.State.COMPLETED -> "Tamamlandı"
+            null -> "Plan bekleniyor"
+        }
+
+        val card = UiStyle.card(this, 18).apply {
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { startActivity(Intent(this@MainActivity, GlucoseHistoryActivity::class.java)) }
+        }
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        headerRow.addView(
+            UiStyle.icon(this, SkIcon.DEVICE_INFO, 28, UiStyle.BLUE, "Kan şekeri"),
+            LinearLayout.LayoutParams(dp(42), dp(42))
+        )
+        headerRow.addView(
+            UiStyle.text(this, "Kan şekeri", 17f, UiStyle.TEXT, true),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        headerRow.addView(UiStyle.icon(this, SkIcon.CHEVRON_RIGHT, 20, UiStyle.MUTED, "Şeker geçmişini aç"))
+        card.addView(headerRow)
+
+        val valueText = latest?.let { "${it.valueMgDl} mg/dL" } ?: "— mg/dL"
+        card.addView(
+            UiStyle.text(this, valueText, 29f, if (latest == null) UiStyle.MUTED else UiStyle.TEXT, true).apply {
+                setPadding(dp(42), dp(8), 0, 0)
+            }
+        )
+
+        val latestDetail = latest?.let {
+            "Son Orko ölçümü • ${timeFormat.format(Date(it.measuredAtMs))} • ${ageText((now - it.measuredAtMs).coerceAtLeast(0L))}"
+        } ?: "Henüz Orko olarak doğrulanmış şeker ölçümü yok"
+        card.addView(
+            UiStyle.text(this, latestDetail, 12.5f, UiStyle.MUTED).apply {
+                setPadding(dp(42), dp(5), 0, 0)
+            }
+        )
+
+        card.addView(UiStyle.divider(this))
+
+        val nextLabel = if (next == null) {
+            "Dosefolk ilaç zamanları geldiğinde günlük ölçüm planı burada görünecek"
+        } else {
+            "${glucoseCheckpointLabel(next.checkpoint)} • ${timeFormat.format(Date(next.targetAtMs))}"
+        }
+        val planRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        planRow.addView(UiStyle.icon(this, if (next?.state == GlucoseDailyPlan.State.OVERDUE) SkIcon.STATUS_WARNING else SkIcon.CLOCK, 19, stateColor))
+        val planLabels = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), 0, 0, 0)
+        }
+        planLabels.addView(UiStyle.text(this, stateText, 13f, stateColor, true))
+        planLabels.addView(UiStyle.text(this, nextLabel, 12.5f, UiStyle.MUTED).apply { setPadding(0, dp(3), 0, 0) })
+        planRow.addView(planLabels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(planRow)
+
+        if (pendingCount > 0) {
+            card.addView(
+                UiStyle.text(this, "$pendingCount ölçüm kime ait olduğu doğrulanmayı bekliyor", 12.5f, UiStyle.AMBER, true).apply {
+                    setPadding(dp(27), dp(10), 0, 0)
+                }
+            )
+        }
+
+        root.addView(card, UiStyle.sectionParams(this, 12))
+    }
+
+    private fun glucoseCheckpointLabel(checkpoint: com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint): String = when (checkpoint) {
+        com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint.MORNING_FASTING -> "Sabah açlık"
+        com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint.BREAKFAST_POST_MEAL -> "Kahvaltı +2 saat"
+        com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint.MIDDAY -> "Öğlen"
+        com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint.DINNER_POST_MEAL -> "Akşam yemeği +2 saat"
+        com.skhealth.guardian.shared.GlucoseScheduleEngine.Checkpoint.BEDTIME -> "Yatmadan önce"
     }
 
     private fun addDeviceCards(watchConnected: Boolean, pcConnected: Boolean, pc60: Pc60Status, now: Long) {
