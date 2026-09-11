@@ -1,0 +1,98 @@
+package com.skhealth.guardian.mobile
+
+import android.app.Activity
+import android.os.Bundle
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Toast
+
+class GlucoseSettingsActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        UiStyle.applyBars(this)
+        val config = GlucoseSettings.load(this)
+        val root = UiStyle.page(this)
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(UiStyle.BG)
+            addView(root)
+        })
+
+        root.addView(
+            UiStyle.detailHeader(
+                this,
+                "Kan şekeri ayarları",
+                "Accu-Chek ölçümleri, sahiplik doğrulaması ve günlük ölçüm hatırlatmaları"
+            )
+        )
+
+        val rules = UiStyle.card(this)
+        rules.addView(UiStyle.iconLabel(this, SkIcon.CLOCK, "Günlük plan", UiStyle.BLUE, UiStyle.TEXT, 22, 18f, true))
+        rules.addView(
+            UiStyle.text(
+                this,
+                "Sabah açlık: sabah ilk ilaç grubu • Kahvaltı +2 saat: yemek başlangıcından 2 saat sonra • Öğlen: kahvaltı başlangıcından 5 saat sonra • Akşam +2 saat: yemek başlangıcından 2 saat sonra • Yatmadan önce: Toujeo ile aynı dönem",
+                13f,
+                UiStyle.MUTED
+            ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 10), 0, 0) }
+        )
+        rules.addView(
+            UiStyle.text(
+                this,
+                "Yemek süresi 30 dakika varsayılır. Tok ilaç alınma saati yemek bitişi kabul edildiği için +2 saat hedefi ilaç saatinden 90 dakika sonradır.",
+                12.5f,
+                UiStyle.MUTED
+            ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 8), 0, 0) }
+        )
+        root.addView(rules)
+
+        val reminders = UiStyle.card(this)
+        reminders.addView(UiStyle.iconLabel(this, SkIcon.BELL, "Hatırlatmalar", UiStyle.AMBER, UiStyle.TEXT, 22, 18f, true))
+        val reminderEnabled = UiStyle.check(this, "Ölçüm zamanı bildirimi aktif", config.remindersEnabled)
+        val overdueEnabled = UiStyle.check(this, "Geciken ölçüm bildirimi aktif", config.overdueEnabled)
+        val graceField = UiStyle.labeledField(this, "Gecikme bildirimi bekleme süresi (dk)", config.overdueGraceMinutes.toString(), true)
+        reminders.addView(reminderEnabled)
+        reminders.addView(overdueEnabled)
+        reminders.addView(graceField)
+        root.addView(reminders, UiStyle.sectionParams(this))
+
+        val ownership = UiStyle.card(this)
+        ownership.addView(UiStyle.iconLabel(this, SkIcon.STATUS_OK, "Ölçüm kime ait?", UiStyle.GREEN, UiStyle.TEXT, 22, 18f, true))
+        val ownershipPrompt = UiStyle.check(this, "Yeni ölçümde Orko / Başka kişi bildirimi göster", config.ownershipPromptEnabled)
+        ownership.addView(ownershipPrompt)
+        ownership.addView(
+            UiStyle.text(
+                this,
+                "Bu bildirim kapatılsa bile yeni ölçümler otomatik olarak Orko'ya yazılmaz. Doğrulanmamış ölçümler Şeker geçmişi ekranında bekler.",
+                12.5f,
+                UiStyle.MUTED
+            ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 8), 0, 0) }
+        )
+        root.addView(ownership, UiStyle.sectionParams(this))
+
+        root.addView(
+            UiStyle.iconButton(this, SkIcon.STATUS_OK, "Kan şekeri ayarlarını kaydet", true, UiStyle.GREEN).apply {
+                setOnClickListener {
+                    val grace = input(graceField).text.toString().toIntOrNull()
+                    if (grace == null || grace !in 1..120) {
+                        Toast.makeText(this@GlucoseSettingsActivity, "Gecikme süresi 1–120 dakika olmalı", Toast.LENGTH_LONG).show()
+                        return@setOnClickListener
+                    }
+                    GlucoseSettings.save(
+                        this@GlucoseSettingsActivity,
+                        GlucoseSettings.Config(
+                            remindersEnabled = reminderEnabled.isChecked,
+                            overdueEnabled = overdueEnabled.isChecked,
+                            overdueGraceMinutes = grace,
+                            ownershipPromptEnabled = ownershipPrompt.isChecked
+                        )
+                    )
+                    Toast.makeText(this@GlucoseSettingsActivity, "Kan şekeri ayarları kaydedildi", Toast.LENGTH_SHORT).show()
+                }
+            },
+            UiStyle.sectionParams(this, 16)
+        )
+    }
+
+    private fun input(field: LinearLayout): EditText = UiStyle.labeledFieldInput(field)
+}
