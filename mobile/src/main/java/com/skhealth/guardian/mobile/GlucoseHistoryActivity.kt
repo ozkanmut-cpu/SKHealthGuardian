@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -48,6 +49,10 @@ class GlucoseHistoryActivity : Activity() {
                 }
             )
         )
+
+        root.addView(UiStyle.iconButton(this, SkIcon.CHARTS, "Şeker grafiğini aç").apply {
+            setOnClickListener { startActivity(Intent(this@GlucoseHistoryActivity, GlucoseChartActivity::class.java)) }
+        })
 
         addDailyPlan(root)
 
