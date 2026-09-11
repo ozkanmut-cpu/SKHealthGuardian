@@ -1,6 +1,6 @@
-# SK Health Guardian — V0.7 Reliability
+# Orko Takip — V0.7 Reliability
 
-Galaxy Watch + Android + PC-60FW safety/wellness monitoring system. Tasker, Gadgetbridge, Health Connect and ntfy are not required in the critical alarm chain.
+Orko Takip is a Galaxy Watch + Android + PC-60FW safety/wellness monitoring system. Tasker, Gadgetbridge, Health Connect and ntfy are not required in the critical alarm chain.
 
 ## Architecture
 
