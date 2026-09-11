@@ -92,6 +92,34 @@ object GlucoseScheduleCoordinator {
         }
     }
 
+    /**
+     * Compensating path for Dosefolk undo/missed corrections. Removing an anchor
+     * also removes all checkpoints derived from it and immediately reschedules
+     * reminders so a stale glucose target cannot survive a medication correction.
+     */
+    fun onMedicationCleared(
+        context: Context,
+        anchor: MedicationAnchor,
+        scheduledDate: String = LocalDate.now().toString()
+    ) {
+        if (scheduledDate != LocalDate.now().toString()) return
+        prepareDate(context, scheduledDate)
+        val edit = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        when (anchor) {
+            MedicationAnchor.MORNING_FIRST_GROUP -> edit.remove(KEY_MORNING_FIRST_GROUP_AT)
+            MedicationAnchor.MORNING_SECOND_POST_MEAL_GROUP -> edit
+                .remove(KEY_BREAKFAST_MED_AT)
+                .remove(KEY_BREAKFAST_TARGET_AT)
+                .remove(KEY_MIDDAY_TARGET_AT)
+            MedicationAnchor.EVENING_COMBINED_POST_MEAL_GROUP -> edit
+                .remove(KEY_DINNER_MED_AT)
+                .remove(KEY_DINNER_TARGET_AT)
+            MedicationAnchor.BEDTIME_TOUJEO -> edit.remove(KEY_TOUJEO_AT)
+        }
+        edit.apply()
+        refreshReminders(context)
+    }
+
     fun onMorningFirstGroupTaken(
         context: Context,
         takenAtMs: Long = System.currentTimeMillis(),
