@@ -16,6 +16,8 @@ object GlucoseOwnershipNotification {
     private const val BASE_NOTIFICATION_ID = 31_000
 
     fun show(context: Context, reading: BloodGlucoseReading) {
+        if (!GlucoseSettings.load(context).ownershipPromptEnabled) return
+
         val manager = context.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
