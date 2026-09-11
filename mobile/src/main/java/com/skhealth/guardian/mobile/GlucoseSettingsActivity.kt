@@ -1,6 +1,7 @@
 package com.skhealth.guardian.mobile
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -67,6 +68,25 @@ class GlucoseSettingsActivity : Activity() {
                 12.5f,
                 UiStyle.MUTED
             ).apply { setPadding(0, UiStyle.dp(this@GlucoseSettingsActivity, 8), 0, 0) }
+        )
+        bridgeCard.addView(
+            UiStyle.iconButton(this, SkIcon.CLOCK, "Dosefolk grup eşlemelerini düzenle", true, UiStyle.PURPLE).apply {
+                setOnClickListener {
+                    val intent = Intent().setClassName(
+                        "com.ozkanmut.ilactakip",
+                        "com.ozkanmut.ilactakip.OrkoBridgeSettingsActivity"
+                    )
+                    runCatching { startActivity(intent) }
+                        .onFailure {
+                            Toast.makeText(
+                                this@GlucoseSettingsActivity,
+                                "Dosefolk bulunamadı veya güncel değil",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                }
+            },
+            UiStyle.sectionParams(this, 10)
         )
         root.addView(bridgeCard)
 
