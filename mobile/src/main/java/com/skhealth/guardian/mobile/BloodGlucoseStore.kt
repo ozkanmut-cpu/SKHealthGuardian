@@ -82,6 +82,14 @@ object BloodGlucoseStore {
         updated
     }
 
+    /** Latest sequence imported from this meter, used as the next RACP sync anchor. */
+    fun latestSequence(context: Context, deviceId: String?): Int? =
+        readRows(context)
+            .asSequence()
+            .filter { deviceId.isNullOrBlank() || it.deviceId == deviceId }
+            .mapNotNull { it.sequenceNumber }
+            .maxOrNull()
+
     fun recent(context: Context, limit: Int = 100): List<BloodGlucoseReading> =
         readRows(context).takeLast(limit)
 
