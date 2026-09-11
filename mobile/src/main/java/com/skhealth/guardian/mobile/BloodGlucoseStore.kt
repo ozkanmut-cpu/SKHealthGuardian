@@ -56,6 +56,32 @@ object BloodGlucoseStore {
         updated
     }
 
+    /** Applies standardized BLE Measurement Context to the matching meter record. */
+    fun updateContextBySequence(
+        context: Context,
+        deviceId: String?,
+        sequenceNumber: Int,
+        measurementContext: BloodGlucoseReading.MeasurementContext
+    ): BloodGlucoseReading? = synchronized(lock) {
+        val rows = readRows(context).toMutableList()
+        val index = rows.indexOfLast {
+            it.sequenceNumber == sequenceNumber &&
+                (deviceId.isNullOrBlank() || it.deviceId == deviceId)
+        }
+        if (index < 0) return@synchronized null
+        val current = rows[index]
+        val updated = current.copy(
+            context = if (measurementContext == BloodGlucoseReading.MeasurementContext.UNKNOWN) {
+                current.context
+            } else {
+                measurementContext
+            }
+        )
+        rows[index] = updated
+        writeRows(context, rows)
+        updated
+    }
+
     fun recent(context: Context, limit: Int = 100): List<BloodGlucoseReading> =
         readRows(context).takeLast(limit)
 
