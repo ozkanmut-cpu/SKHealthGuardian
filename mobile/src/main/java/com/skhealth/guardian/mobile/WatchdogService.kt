@@ -20,9 +20,9 @@ class WatchdogService : Service() {
     override fun onCreate() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("watchdog", "Health watchdog", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel("watchdog", "Orko Takip • Sağlık izleme", NotificationManager.IMPORTANCE_LOW))
         startForeground(21, NotificationCompat.Builder(this, "watchdog").setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("SK Health Guardian aktif").setContentText("Sağlık verisi izleniyor").setOngoing(true).build())
+            .setContentTitle("Orko Takip").setContentText("Sağlık verisi izleniyor").setOngoing(true).build())
         scope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
