@@ -27,7 +27,7 @@ class GlucoseReminderReceiver : BroadcastReceiver() {
 
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Şeker ölçümü hatırlatmaları", NotificationManager.IMPORTANCE_HIGH)
+            NotificationChannel(CHANNEL_ID, "Orko Takip • Şeker ölçümü hatırlatmaları", NotificationManager.IMPORTANCE_HIGH)
         )
         val openIntent = PendingIntent.getActivity(
             context,
@@ -39,8 +39,8 @@ class GlucoseReminderReceiver : BroadcastReceiver() {
             NOTIFICATION_BASE + checkpoint.ordinal,
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(if (requestedOverdue) "Şeker ölçümü gecikti" else "Şeker ölçüm zamanı")
-                .setContentText("${checkpointLabel(checkpoint)} ölçümü ${if (requestedOverdue) "henüz tamamlanmadı" else "şimdi yapılabilir"}.")
+                .setContentTitle("Orko Takip")
+                .setContentText("${if (requestedOverdue) "Şeker ölçümü gecikti" else "Şeker ölçüm zamanı"} • ${checkpointLabel(checkpoint)} ölçümü ${if (requestedOverdue) "henüz tamamlanmadı" else "şimdi yapılabilir"}.")
                 .setContentIntent(openIntent)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
