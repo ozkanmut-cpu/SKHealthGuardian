@@ -139,15 +139,15 @@ class AlertDispatcher(private val context: Context) {
     private fun localNotification(alarmIntent: Intent, alertId: String, alert: AlertEvent) {
         val notificationTag = ExactAlertResourcePolicy.notificationTag(alertId) ?: return
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("critical", "Critical health alerts", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("critical", "Orko Takip • Kritik sağlık alarmları", NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(context, 0, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         nm.notify(
             notificationTag,
             AlarmActivity.CRITICAL_NOTIFICATION_ID,
             NotificationCompat.Builder(context, "critical")
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setContentTitle("KRİTİK SAĞLIK UYARISI")
-                .setContentText(alert.message)
+                .setContentTitle("Orko Takip")
+                .setContentText("KRİTİK SAĞLIK UYARISI • ${alert.message}")
                 .setContentIntent(pi)
                 .setFullScreenIntent(pi, true)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
