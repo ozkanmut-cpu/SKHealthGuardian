@@ -76,14 +76,14 @@ class AccuChekBleService : Service() {
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "Accu-Chek bağlantısı", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, "Orko Takip • Accu-Chek", NotificationManager.IMPORTANCE_LOW)
         )
         startForeground(
             NOTIFICATION_ID,
             NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("Accu-Chek bağlantısı aktif")
-                .setContentText("Şeker ölçüm cihazı izleniyor")
+                .setContentTitle("Orko Takip")
+                .setContentText("Accu-Chek bağlantısı aktif • Şeker ölçüm cihazı izleniyor")
                 .setOngoing(true)
                 .build()
         )
