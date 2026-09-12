@@ -17,8 +17,8 @@ object LocalAlarm {
 
     fun raise(context: Context, alert: AlertEvent) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Kritik sağlık alarmları", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Doğrulanmış SpO₂ ve nabız alarmları"
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Orko Takip • Kritik sağlık alarmları", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Orko Takip doğrulanmış SpO₂ ve nabız alarmları"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 700, 300, 700, 300, 1200)
             lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
@@ -38,9 +38,9 @@ object LocalAlarm {
 
         nm.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("⚠ SAĞLIK ALARMI")
-            .setContentText(alert.message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("${alert.message}\n\nÖlçümü kontrol et. Telefona da iletilmeye çalışılıyor."))
+            .setContentTitle("Orko Takip")
+            .setContentText("⚠ SAĞLIK ALARMI • ${alert.message}")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("⚠ SAĞLIK ALARMI\n${alert.message}\n\nÖlçümü kontrol et. Telefona da iletilmeye çalışılıyor."))
             .setContentIntent(pending)
             .setFullScreenIntent(pending, true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
