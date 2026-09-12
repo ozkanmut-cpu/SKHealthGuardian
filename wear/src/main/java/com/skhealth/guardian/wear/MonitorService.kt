@@ -46,8 +46,8 @@ class MonitorService : Service() {
         val intervalMin = WearSettings.measurementIntervalMs(this) / 60_000L
         startForeground(11, NotificationCompat.Builder(this, "monitor")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Sağlık izleme aktif")
-            .setContentText("SpO₂ ve nabız $intervalMin dakikada bir ölçülüyor")
+            .setContentTitle("Orko Takip")
+            .setContentText("Sağlık izleme aktif • SpO₂ ve nabız $intervalMin dakikada bir ölçülüyor")
             .setOngoing(true).build())
         startHeartbeat()
         startMonitoring()
@@ -241,7 +241,7 @@ class MonitorService : Service() {
 
     private fun createChannel() {
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-            .createNotificationChannel(NotificationChannel("monitor", "Health monitoring", NotificationManager.IMPORTANCE_LOW))
+            .createNotificationChannel(NotificationChannel("monitor", "Orko Takip • Sağlık izleme", NotificationManager.IMPORTANCE_LOW))
     }
 
     companion object {
