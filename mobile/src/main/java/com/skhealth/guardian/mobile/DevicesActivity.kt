@@ -30,45 +30,32 @@ class DevicesActivity : Activity() {
         val watchConnected = SourcePriorityCoordinator.isWatchConnected(this, now)
         val heartbeatAt = WatchHeartbeatStore.timestamp(this)
         val watchBattery = WatchHeartbeatStore.battery(this)
-        root.addView(
-            deviceCard(
-                SkIcon.WATCH,
-                "Galaxy Watch",
-                watchConnected,
-                listOf<Pair<SkIcon, Pair<String, String>>>(
-                    SkIcon.LINK to ("Durum" to (if (watchConnected) "Bağlı" else "Bağlı değil")),
-                    SkIcon.BATTERY to ("Pil seviyesi" to (if (watchBattery in 0..100) "%$watchBattery" else "—")),
-                    SkIcon.CLOCK to ("Son bağlantı" to (if (heartbeatAt > 0) ageText((now - heartbeatAt).coerceAtLeast(0L)) else "—"))
-                )
-            )
-        )
+        root.addView(deviceCard(SkIcon.WATCH, "Galaxy Watch", watchConnected, listOf(
+            SkIcon.LINK to ("Durum" to (if (watchConnected) "Bağlı" else "Bağlı değil")),
+            SkIcon.BATTERY to ("Pil seviyesi" to (if (watchBattery in 0..100) "%$watchBattery" else "—")),
+            SkIcon.CLOCK to ("Son bağlantı" to (if (heartbeatAt > 0) ageText((now - heartbeatAt).coerceAtLeast(0L)) else "—"))
+        )))
 
         val pc = Pc60StatusStore.load(this)
         val pcConnected = pc.lastPacketAt > 0 && now - pc.lastPacketAt in 0..15_000L
-        root.addView(
-            deviceCard(
-                SkIcon.OXIMETER,
-                "PC-60FW",
-                pcConnected,
-                listOf<Pair<SkIcon, Pair<String, String>>>(
-                    SkIcon.LINK to ("Durum" to (if (pcConnected) "Bağlı" else "Bağlı değil")),
-                    SkIcon.BATTERY to ("Pil seviyesi" to (pc.batteryLevel?.let { "%$it" } ?: "—")),
-                    SkIcon.CLOCK to ("Son veri" to (if (pc.lastPacketAt > 0) ageText((now - pc.lastPacketAt).coerceAtLeast(0L)) else "—"))
-                ),
-                actionLabel = "Cihaz ayrıntılarını aç",
-                action = { startActivity(Intent(this, Pc60Activity::class.java)) }
+        root.addView(deviceCard(
+            SkIcon.OXIMETER, "PC-60FW", pcConnected, listOf(
+                SkIcon.LINK to ("Durum" to (if (pcConnected) "Bağlı" else "Bağlı değil")),
+                SkIcon.BATTERY to ("Pil seviyesi" to (pc.batteryLevel?.let { "%$it" } ?: "—")),
+                SkIcon.CLOCK to ("Son veri" to (if (pc.lastPacketAt > 0) ageText((now - pc.lastPacketAt).coerceAtLeast(0L)) else "—"))
             ),
-            UiStyle.sectionParams(this)
-        )
+            actionLabel = "Cihaz ayrıntılarını aç",
+            action = { startActivity(Intent(this, Pc60Activity::class.java)) }
+        ), UiStyle.sectionParams(this))
 
-        val glucose = AccuChekStatusStore.load(this)
-        val glucoseConnected = glucose.state.startsWith("Bağlı", ignoreCase = true)
-        root.addView(
-            deviceCard(
+        if (FeatureFlags.ACCU_CHEK_INSTANT_UI_ENABLED) {
+            val glucose = AccuChekStatusStore.load(this)
+            val glucoseConnected = glucose.state.startsWith("Bağlı", ignoreCase = true)
+            root.addView(deviceCard(
                 SkIcon.DEVICE_INFO,
                 glucose.deviceName.ifBlank { "Accu-Chek Instant" },
                 glucoseConnected,
-                listOf<Pair<SkIcon, Pair<String, String>>>(
+                listOf(
                     SkIcon.LINK to ("Durum" to glucose.state),
                     SkIcon.CLOCK to ("Son şeker" to (glucose.lastValueMgDl?.let { "$it mg/dL" } ?: "—")),
                     SkIcon.STATUS_NONE to ("Doğrulama bekleyen" to glucose.pendingOwnershipCount.toString()),
@@ -76,21 +63,14 @@ class DevicesActivity : Activity() {
                 ),
                 actionLabel = if (AccuChekStatusStore.savedAddress(this).isBlank()) "Accu-Chek bağla" else "Yeniden tara / bağlan",
                 action = {
-                    ContextCompat.startForegroundService(
-                        this,
-                        Intent(this, AccuChekBleService::class.java).setAction(AccuChekBleService.ACTION_RESCAN)
-                    )
+                    ContextCompat.startForegroundService(this, Intent(this, AccuChekBleService::class.java).setAction(AccuChekBleService.ACTION_RESCAN))
                 }
-            ),
-            UiStyle.sectionParams(this)
-        )
+            ), UiStyle.sectionParams(this))
 
-        root.addView(
-            UiStyle.iconButton(this, SkIcon.CLOCK, "Şeker geçmişi ve doğrulama").apply {
+            root.addView(UiStyle.iconButton(this, SkIcon.CLOCK, "Şeker geçmişi ve doğrulama").apply {
                 setOnClickListener { startActivity(Intent(this@DevicesActivity, GlucoseHistoryActivity::class.java)) }
-            },
-            UiStyle.sectionParams(this, 10)
-        )
+            }, UiStyle.sectionParams(this, 10))
+        }
     }
 
     private fun deviceCard(
@@ -101,10 +81,7 @@ class DevicesActivity : Activity() {
         actionLabel: String? = null,
         action: (() -> Unit)? = null
     ): LinearLayout = UiStyle.card(this, 17).apply {
-        val header = LinearLayout(this@DevicesActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        val header = LinearLayout(this@DevicesActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         header.addView(UiStyle.icon(this@DevicesActivity, deviceIcon, 28, UiStyle.BLUE, title), LinearLayout.LayoutParams(UiStyle.dp(this@DevicesActivity, 38), UiStyle.dp(this@DevicesActivity, 38)))
         header.addView(UiStyle.text(this@DevicesActivity, title, 18f, UiStyle.TEXT, true), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(UiStyle.icon(this@DevicesActivity, if (connected) SkIcon.STATUS_OK else SkIcon.STATUS_NONE, 20, if (connected) UiStyle.GREEN else UiStyle.MUTED))
