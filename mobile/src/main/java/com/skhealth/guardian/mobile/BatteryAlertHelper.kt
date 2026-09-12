@@ -14,7 +14,7 @@ object BatteryAlertHelper {
         val stateKey = "low_$key"
         val alreadyLow = prefs.getBoolean(stateKey, false)
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("battery", "Battery warnings", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel("battery", "Orko Takip • Pil uyarıları", NotificationManager.IMPORTANCE_DEFAULT))
         val id = 700 + key.hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) % 200 }
 
         if (batteryPct <= 15 && !alreadyLow) {
@@ -23,8 +23,8 @@ object BatteryAlertHelper {
                 id,
                 NotificationCompat.Builder(context, "battery")
                     .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                    .setContentTitle("$label pili düşük")
-                    .setContentText("Pil seviyesi %$batteryPct")
+                    .setContentTitle("Orko Takip")
+                    .setContentText("$label pili düşük • Pil seviyesi %$batteryPct")
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .build()
             )
