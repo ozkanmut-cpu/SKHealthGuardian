@@ -24,11 +24,14 @@ class SettingsHubActivity : Activity() {
         root.addView(UiStyle.subtitle(this, "Alarm, cihaz ve uygulama ayarları"))
 
         root.addView(UiStyle.sectionTitle(this, "İzleme"))
-        root.addView(sectionCard(
-            HubItem(SkIcon.HEART, "Alarm ayarları", "SpO₂, nabız ve doğrulama süreleri", MeasurementSettingsActivity::class.java),
-            HubItem(SkIcon.CLOCK, "Kan şekeri", "Günlük plan, hatırlatma ve sahiplik doğrulaması", GlucoseSettingsActivity::class.java),
-            HubItem(SkIcon.WATCH, "Cihazlar", "Galaxy Watch, PC-60FW ve Accu-Chek bağlantıları", DevicesActivity::class.java)
-        ))
+        val monitoringItems = mutableListOf(
+            HubItem(SkIcon.HEART, "Alarm ayarları", "SpO₂, nabız ve doğrulama süreleri", MeasurementSettingsActivity::class.java)
+        )
+        if (FeatureFlags.ACCU_CHEK_INSTANT_UI_ENABLED) {
+            monitoringItems += HubItem(SkIcon.CLOCK, "Kan şekeri", "Günlük plan, hatırlatma ve sahiplik doğrulaması", GlucoseSettingsActivity::class.java)
+        }
+        monitoringItems += HubItem(SkIcon.WATCH, "Cihazlar", "Galaxy Watch ve PC-60FW bağlantıları", DevicesActivity::class.java)
+        root.addView(sectionCard(*monitoringItems.toTypedArray()))
 
         root.addView(UiStyle.sectionTitle(this, "Uyarılar"))
         root.addView(sectionCard(
