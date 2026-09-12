@@ -102,7 +102,7 @@ class MainActivity : Activity() {
 
         addQuickMeasureButton()
         addStatusCard(severity, age, sourceTs)
-        addGlucoseCard(now)
+        if (FeatureFlags.ACCU_CHEK_INSTANT_UI_ENABLED) addGlucoseCard(now)
         addDeviceCards(watchConnected, pcConnected, pc60, now)
         addMetricCards(spo2, hr, cfg.spo2LowThreshold, cfg.heartRateHighThreshold)
         addRecentMeasurements(latestValid)
