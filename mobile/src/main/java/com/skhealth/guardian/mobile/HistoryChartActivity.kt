@@ -9,6 +9,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.skhealth.guardian.shared.HealthReading
 
 class HistoryChartActivity : Activity() {
@@ -27,6 +29,17 @@ class HistoryChartActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(UiStyle.dp(this@HistoryChartActivity, 20), UiStyle.dp(this@HistoryChartActivity, 16), UiStyle.dp(this@HistoryChartActivity, 20), UiStyle.dp(this@HistoryChartActivity, 12))
         }
+        val baseLeft = header.paddingLeft
+        val baseTop = header.paddingTop
+        val baseRight = header.paddingRight
+        val baseBottom = header.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(header) { view, insets ->
+            val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            view.setPadding(baseLeft, baseTop + statusBar.top, baseRight, baseBottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(header)
+
         header.addView(UiStyle.icon(this, SkIcon.CHARTS, 30, UiStyle.BLUE, "Grafikler"), LinearLayout.LayoutParams(UiStyle.dp(this, 34), UiStyle.dp(this, 34)))
         header.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
