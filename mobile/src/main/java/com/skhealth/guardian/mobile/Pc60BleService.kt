@@ -47,13 +47,13 @@ class Pc60BleService : Service() {
         sdkRuntime = Pc60SdkRuntimeFactory.create()
 
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "PC-60FW bağlantısı", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Orko Takip • PC-60FW", NotificationManager.IMPORTANCE_LOW))
         startForeground(
             NOTIFICATION_ID,
             NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("PC-60FW bağlantısı aktif")
-                .setContentText("Bluetooth oksimetre izleniyor")
+                .setContentTitle("Orko Takip")
+                .setContentText("PC-60FW bağlantısı aktif • Bluetooth oksimetre izleniyor")
                 .setOngoing(true)
                 .build()
         )
