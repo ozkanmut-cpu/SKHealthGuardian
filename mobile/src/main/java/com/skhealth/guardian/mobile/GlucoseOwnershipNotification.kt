@@ -12,7 +12,7 @@ import com.skhealth.guardian.shared.BloodGlucoseReading
 /** Prompts for ownership without ever assuming that a meter result belongs to Orko. */
 object GlucoseOwnershipNotification {
     private const val CHANNEL_ID = "glucose_ownership"
-    private const val CHANNEL_NAME = "Şeker ölçümü doğrulama"
+    private const val CHANNEL_NAME = "Orko Takip • Şeker ölçümü doğrulama"
     private const val BASE_NOTIFICATION_ID = 31_000
 
     fun show(context: Context, reading: BloodGlucoseReading) {
@@ -53,8 +53,8 @@ object GlucoseOwnershipNotification {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Yeni şeker ölçümü: ${reading.valueMgDl} mg/dL")
-            .setContentText("Bu ölçüm Orko'nun mu?$contextText")
+            .setContentTitle("Orko Takip")
+            .setContentText("Yeni şeker ölçümü: ${reading.valueMgDl} mg/dL • Bu ölçüm Orko'nun mu?$contextText")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
