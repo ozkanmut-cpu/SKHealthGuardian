@@ -7,6 +7,11 @@ enum class WatchSpO2Decision {
     ALARM_EARLY
 }
 
+data class WatchSpO2AlarmSnapshot(
+    val observationSince: Long?,
+    val alarmLatched: Boolean
+)
+
 /**
  * Galaxy Watch SpO2 policy optimized for on-demand watch measurements.
  *
@@ -51,6 +56,16 @@ class WatchSpO2AlarmPolicy(
         }
 
         return WatchSpO2Decision.NONE
+    }
+
+    fun snapshot(): WatchSpO2AlarmSnapshot = WatchSpO2AlarmSnapshot(
+        observationSince = observationSince,
+        alarmLatched = alarmLatched
+    )
+
+    fun restore(snapshot: WatchSpO2AlarmSnapshot) {
+        observationSince = snapshot.observationSince
+        alarmLatched = snapshot.alarmLatched
     }
 
     fun reset() {
