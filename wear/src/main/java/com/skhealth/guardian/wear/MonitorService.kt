@@ -234,7 +234,8 @@ class MonitorService : Service() {
             WatchSpO2Decision.RECOVERED -> return false
             WatchSpO2Decision.NONE -> Unit
         }
-        return spo2 != null && spo2 in 75..84
+        val snapshot = watchSpO2Policy.snapshot()
+        return spo2 != null && spo2 in 75..84 && !snapshot.alarmLatched
     }
 
     private fun restoreWatchSpO2Policy() {
