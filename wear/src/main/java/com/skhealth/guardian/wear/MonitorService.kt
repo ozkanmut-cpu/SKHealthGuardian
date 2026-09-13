@@ -13,6 +13,8 @@ import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.AlarmConfig
 import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.HealthReading
+import com.skhealth.guardian.shared.WatchSpO2AlarmPolicy
+import com.skhealth.guardian.shared.WatchSpO2Decision
 import com.skhealth.guardian.wear.sensor.SamsungSensorGateway
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -26,6 +28,7 @@ class MonitorService : Service() {
     private var activeConfig = AlarmConfig()
     private var engine = AlarmEngine(activeConfig)
     private var engineSignature = ""
+    private val watchSpO2Policy = WatchSpO2AlarmPolicy()
     private var lastValidReadingAt = 0L
     private var serviceStartedAt = 0L
     private var lastSensorFailureAlertAt = 0L
@@ -120,9 +123,7 @@ class MonitorService : Service() {
                         )
                         LocalAlarm.raise(this@MonitorService, alert)
                         val deliveredOrQueued = runCatching { bridge.sendAlert(alert) }.getOrDefault(false)
-                        if (!deliveredOrQueued) {
-                            inMemoryTechnicalAlertRetry = alert
-                        }
+                        if (!deliveredOrQueued) inMemoryTechnicalAlertRetry = alert
                     }
                 }
             }
@@ -147,52 +148,85 @@ class MonitorService : Service() {
             val triggerAt = System.currentTimeMillis()
 
             val hr = measureHeartRateWithRetry()
-            if (hr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = hr))
-            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+            if (hr != null) processGeneric(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = hr))
+            else recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
 
             val spo2 = measureSpO2WithRetry()
-            if (spo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = spo2))
-            else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+            val followLowSpo2 = if (spo2 != null) {
+                processWatchSpO2(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = spo2))
+            } else {
+                recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+                false
+            }
 
             val confirmHr = hr != null && hr > activeConfig.heartRateHighThreshold
-            val confirmSpo2 = spo2 != null &&
-                spo2 >= activeConfig.spo2CriticalImmediate &&
-                spo2 < activeConfig.spo2LowThreshold
-
-            if (confirmHr || confirmSpo2) {
-                confirmTriggeredReadings(triggerAt, confirmHr, confirmSpo2)
-            }
+            if (confirmHr) confirmHeartRate(triggerAt)
+            if (followLowSpo2) followLowSpO2(triggerAt)
         } finally {
             if (wake.isHeld) wake.release()
         }
     }
 
-    private suspend fun confirmTriggeredReadings(triggerAt: Long, confirmHr: Boolean, confirmSpo2: Boolean) {
+    private suspend fun confirmHeartRate(triggerAt: Long) {
         val confirmDelayMs = WearSettings.confirmDelayMs(this)
         delayUntil(triggerAt + confirmDelayMs)
-        var retryHr = false
-        var retrySpo2 = false
-
-        if (confirmHr) {
-            val secondHr = runCatching { sensor.measureHeartRate() }.getOrNull()
-            if (secondHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = secondHr)) else retryHr = true
+        val secondHr = runCatching { sensor.measureHeartRate() }.getOrNull()
+        if (secondHr != null) {
+            processGeneric(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = secondHr))
+            return
         }
-        if (confirmSpo2) {
-            val secondSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
-            if (secondSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = secondSpo2)) else retrySpo2 = true
-        }
-        if (!retryHr && !retrySpo2) return
-
         runCatching { sensor.reconnect() }
         delayUntil(triggerAt + confirmDelayMs + FINAL_RETRY_AFTER_CONFIRM_MS)
-        if (retryHr) {
-            val finalHr = runCatching { sensor.measureHeartRate() }.getOrNull()
-            if (finalHr != null) process(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = finalHr)) else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+        val finalHr = runCatching { sensor.measureHeartRate() }.getOrNull()
+        if (finalHr != null) processGeneric(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = finalHr))
+        else recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+    }
+
+    private suspend fun followLowSpO2(triggerAt: Long) {
+        var nextAt = triggerAt + WATCH_SPO2_FOLLOWUP_INTERVAL_MS
+        val stopAt = triggerAt + WATCH_SPO2_CONFIRMATION_WINDOW_MS
+        while (isActive && nextAt <= stopAt) {
+            delayUntil(nextAt)
+            val value = runCatching { sensor.measureSpO2(WATCH_SPO2_MEASUREMENT_TIMEOUT_MS) }.getOrNull()
+            if (value == null) {
+                recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+            } else {
+                val keepFollowing = processWatchSpO2(
+                    HealthReading(timestampMs = System.currentTimeMillis(), spo2 = value)
+                )
+                if (!keepFollowing) return
+            }
+            nextAt += WATCH_SPO2_FOLLOWUP_INTERVAL_MS
         }
-        if (retrySpo2) {
-            val finalSpo2 = runCatching { sensor.measureSpO2() }.getOrNull()
-            if (finalSpo2 != null) process(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = finalSpo2)) else process(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
+    }
+
+    private suspend fun processWatchSpO2(reading: HealthReading): Boolean {
+        recordAndSend(reading)
+        val spo2 = reading.spo2
+        val decision = watchSpO2Policy.evaluate(reading.timestampMs, spo2, reading.valid)
+        when (decision) {
+            WatchSpO2Decision.ALARM_IMMEDIATE -> {
+                LocalAlarm.raise(this, AlertEvent(
+                    AlertType.SPO2_CRITICAL,
+                    reading.timestampMs,
+                    reading,
+                    "Saat SpO₂ kritik: %$spo2"
+                ))
+                return false
+            }
+            WatchSpO2Decision.ALARM_EARLY -> {
+                LocalAlarm.raise(this, AlertEvent(
+                    AlertType.SPO2_LOW_CONFIRMED,
+                    reading.timestampMs,
+                    reading,
+                    "Saat SpO₂ 3 dakika boyunca %85 altından toparlanmadı: %$spo2"
+                ))
+                return false
+            }
+            WatchSpO2Decision.RECOVERED -> return false
+            WatchSpO2Decision.NONE -> Unit
         }
+        return spo2 != null && spo2 in 75..84
     }
 
     private suspend fun delayUntil(targetMs: Long) {
@@ -220,15 +254,20 @@ class MonitorService : Service() {
         return null
     }
 
-    private suspend fun process(reading: HealthReading) {
+    private suspend fun processGeneric(reading: HealthReading) {
+        recordAndSend(reading)
+        val engineReading = reading.copy(spo2 = null)
+        val alerts = engine.evaluate(engineReading)
+        persistEngineState()
+        if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
+    }
+
+    private suspend fun recordAndSend(reading: HealthReading) {
         if (reading.valid && (reading.spo2 != null || reading.heartRate != null)) {
             lastValidReadingAt = reading.timestampMs
             WearStatusStore.update(this, reading)
         }
         runCatching { bridge.send(reading) }
-        val alerts = engine.evaluate(reading)
-        persistEngineState()
-        if (alerts.isNotEmpty()) LocalAlarm.raise(this, alerts.first())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -248,5 +287,8 @@ class MonitorService : Service() {
         const val ACTION_MEASURE_NOW = "com.skhealth.guardian.wear.MEASURE_NOW"
         private const val MIN_SENSOR_STALE_MS = 10 * 60_000L
         private const val FINAL_RETRY_AFTER_CONFIRM_MS = 60_000L
+        private const val WATCH_SPO2_FOLLOWUP_INTERVAL_MS = 30_000L
+        private const val WATCH_SPO2_CONFIRMATION_WINDOW_MS = 3 * 60_000L
+        private const val WATCH_SPO2_MEASUREMENT_TIMEOUT_MS = 20_000L
     }
 }
