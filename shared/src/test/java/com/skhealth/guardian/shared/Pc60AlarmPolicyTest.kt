@@ -15,46 +15,70 @@ class Pc60AlarmPolicyTest {
         )
 
     @Test
-    fun lowValueMustPersistForTwoMinutes() {
-        val p = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
+    fun below75AlarmsImmediately() {
+        val p = Pc60AlarmPolicy()
+        assertEquals(Pc60Decision.ALARM_IMMEDIATE, p.evaluate(sample(0L, 74)))
+    }
+
+    @Test
+    fun exactly75DoesNotImmediateAlarm() {
+        val p = Pc60AlarmPolicy()
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(0L, 75)))
+    }
+
+    @Test
+    fun below85AtThreeMinutesAlarmsEarly() {
+        val p = Pc60AlarmPolicy()
         assertEquals(Pc60Decision.NONE, p.evaluate(sample(0L, 80)))
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(119_999L, 82)))
-        assertEquals(Pc60Decision.ALARM, p.evaluate(sample(120_000L, 84)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(179_999L, 84)))
+        assertEquals(Pc60Decision.ALARM_EARLY, p.evaluate(sample(180_000L, 84)))
     }
 
     @Test
-    fun stableRecoveryAbove85CancelsPendingAlarm() {
-        val p = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(0L, 79)))
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(30_000L, 86)))
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(39_999L, 87)))
-        assertEquals(Pc60Decision.RECOVERED, p.evaluate(sample(40_000L, 88)))
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(130_000L, 84)))
+    fun reaching85AvoidsEarlyAlarmButStillRequires90() {
+        val p = Pc60AlarmPolicy()
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(0L, 80)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(120_000L, 86)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(180_000L, 86)))
+        assertEquals(Pc60Decision.ALARM_TIMEOUT, p.evaluate(sample(300_000L, 89)))
     }
 
     @Test
-    fun oneShortRecoverySpikeDoesNotCancel() {
-        val p = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
+    fun stable90RecoveryCancelsObservation() {
+        val p = Pc60AlarmPolicy()
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(0L, 80)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(120_000L, 86)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(200_000L, 90)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(214_999L, 91)))
+        assertEquals(Pc60Decision.RECOVERED, p.evaluate(sample(215_000L, 90)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(400_000L, 92)))
+    }
+
+    @Test
+    fun short90SpikeDoesNotRecover() {
+        val p = Pc60AlarmPolicy()
         p.evaluate(sample(0L, 80))
-        p.evaluate(sample(30_000L, 86))
-        p.evaluate(sample(35_000L, 84))
-        assertEquals(Pc60Decision.ALARM, p.evaluate(sample(120_000L, 84)))
+        p.evaluate(sample(100_000L, 90))
+        p.evaluate(sample(105_000L, 89))
+        assertEquals(Pc60Decision.ALARM_TIMEOUT, p.evaluate(sample(300_000L, 89)))
     }
 
     @Test
     fun invalidSignalResetsObservationWindow() {
-        val p = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
+        val p = Pc60AlarmPolicy()
         p.evaluate(sample(0L, 80))
-        p.evaluate(sample(60_000L, 0, valid = false))
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(120_000L, 80)))
-        assertEquals(Pc60Decision.ALARM, p.evaluate(sample(240_000L, 80)))
+        p.evaluate(sample(120_000L, 0, valid = false))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(180_000L, 80)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(359_999L, 84)))
+        assertEquals(Pc60Decision.ALARM_EARLY, p.evaluate(sample(360_000L, 84)))
     }
 
     @Test
-    fun runtimeSettingChangeResetsPendingState() {
-        val p = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
-        p.evaluate(sample(0L, 80))
-        p.update(83, 180_000L, 86, 15_000L)
-        assertEquals(Pc60Decision.NONE, p.evaluate(sample(120_000L, 82)))
+    fun alarmIsLatchedUntilStableRecovery() {
+        val p = Pc60AlarmPolicy()
+        assertEquals(Pc60Decision.ALARM_IMMEDIATE, p.evaluate(sample(0L, 70)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(1_000L, 69)))
+        assertEquals(Pc60Decision.NONE, p.evaluate(sample(20_000L, 90)))
+        assertEquals(Pc60Decision.RECOVERED, p.evaluate(sample(35_000L, 91)))
     }
 }
