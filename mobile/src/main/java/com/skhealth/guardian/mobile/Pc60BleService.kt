@@ -458,8 +458,8 @@ class Pc60BleService : Service() {
         private const val STREAM_STALL_TIMEOUT_MS = 8_000L
         private const val MAX_NO_DATA_RECOVERY_ATTEMPTS = 2
 
-        private val SERVICE_UUID = UUID.fromString("0000fff0-0000-1000-8000-00805f9b34fb")
-        private val NOTIFY_UUID = UUID.fromString("0000fff1-0000-1000-8000-00805f9b34fb")
+        private val SERVICE_UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
+        private val NOTIFY_UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
         private val CCC_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         private fun looksLikePc60(name: String): Boolean {
