@@ -185,7 +185,7 @@ class MonitorService : Service() {
     private suspend fun followLowSpO2(triggerAt: Long) {
         var nextAt = triggerAt + WATCH_SPO2_FOLLOWUP_INTERVAL_MS
         val stopAt = triggerAt + WATCH_SPO2_CONFIRMATION_WINDOW_MS
-        while (isActive && nextAt <= stopAt) {
+        while (scope.isActive && nextAt <= stopAt) {
             delayUntil(nextAt)
             val value = runCatching { sensor.measureSpO2(WATCH_SPO2_MEASUREMENT_TIMEOUT_MS) }.getOrNull()
             if (value == null) {
