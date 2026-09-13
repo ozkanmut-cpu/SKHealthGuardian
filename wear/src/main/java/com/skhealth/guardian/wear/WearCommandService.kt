@@ -25,7 +25,7 @@ class WearCommandService : WearableListenerService() {
                 WearSettings.saveTiming(this, event.data)
                 scope.launch {
                     sendStatus(
-                        "CONFIG_OK | SpO₂ kritik=${config.spo2CriticalImmediate} | düşük=${config.spo2LowThreshold} | HR yüksek=${config.heartRateHighThreshold} | ölçüm=${WearSettings.measurementIntervalMs(this@WearCommandService) / 60_000}dk | stale=${config.staleDataMs / 60_000}dk"
+                        "CONFIG_OK | Watch SpO₂ ani<${WearSettings.watchSpO2ImmediateThreshold(this@WearCommandService)} | takip<${WearSettings.watchSpO2RecoveryThreshold(this@WearCommandService)} | süre=${WearSettings.watchSpO2ConfirmationMs(this@WearCommandService) / 60_000}dk | tekrar=${WearSettings.watchSpO2FollowupMs(this@WearCommandService) / 1_000}sn | HR yüksek=${config.heartRateHighThreshold} | normal ölçüm=${WearSettings.measurementIntervalMs(this@WearCommandService) / 60_000}dk"
                     )
                 }
             }
