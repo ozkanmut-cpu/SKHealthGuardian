@@ -11,7 +11,7 @@ class WatchSpO2AlarmPolicyTest {
     }
 
     @Test
-    fun exactly75DoesNotAlarmImmediately() {
+    fun exactly75StartsFollowUpWithoutImmediateAlarm() {
         val p = WatchSpO2AlarmPolicy()
         assertEquals(WatchSpO2Decision.NONE, p.evaluate(0L, 75, true))
     }
@@ -24,19 +24,18 @@ class WatchSpO2AlarmPolicyTest {
     }
 
     @Test
-    fun reaching85AvoidsEarlyAlarmButStillNeeds90() {
+    fun reaching85ClosesFollowUpImmediately() {
         val p = WatchSpO2AlarmPolicy()
         assertEquals(WatchSpO2Decision.NONE, p.evaluate(0L, 80, true))
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(180_000L, 86, true))
-        assertEquals(WatchSpO2Decision.ALARM_TIMEOUT, p.evaluate(300_000L, 88, true))
+        assertEquals(WatchSpO2Decision.RECOVERED, p.evaluate(60_000L, 85, true))
+        assertEquals(WatchSpO2Decision.NONE, p.evaluate(300_000L, 88, true))
     }
 
     @Test
-    fun stable90Recovers() {
+    fun readingAbove85NeverStartsFollowUp() {
         val p = WatchSpO2AlarmPolicy()
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(0L, 84, true))
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(120_000L, 90, true))
-        assertEquals(WatchSpO2Decision.RECOVERED, p.evaluate(135_000L, 91, true))
+        assertEquals(WatchSpO2Decision.NONE, p.evaluate(0L, 88, true))
+        assertEquals(WatchSpO2Decision.NONE, p.evaluate(300_000L, 89, true))
     }
 
     @Test
@@ -48,12 +47,12 @@ class WatchSpO2AlarmPolicyTest {
     }
 
     @Test
-    fun invalidSampleBreaksRecoveryStreak() {
+    fun recoveryAfterAlarmAllowsANewEpisode() {
         val p = WatchSpO2AlarmPolicy()
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(0L, 84, true))
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(120_000L, 90, true))
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(130_000L, null, false))
-        assertEquals(WatchSpO2Decision.NONE, p.evaluate(140_000L, 91, true))
-        assertEquals(WatchSpO2Decision.RECOVERED, p.evaluate(155_000L, 92, true))
+        assertEquals(WatchSpO2Decision.ALARM_IMMEDIATE, p.evaluate(0L, 74, true))
+        assertEquals(WatchSpO2Decision.NONE, p.evaluate(30_000L, 82, true))
+        assertEquals(WatchSpO2Decision.RECOVERED, p.evaluate(60_000L, 86, true))
+        assertEquals(WatchSpO2Decision.NONE, p.evaluate(120_000L, 80, true))
+        assertEquals(WatchSpO2Decision.ALARM_EARLY, p.evaluate(300_000L, 84, true))
     }
 }
