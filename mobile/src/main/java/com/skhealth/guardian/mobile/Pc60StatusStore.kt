@@ -14,12 +14,15 @@ data class Pc60Status(
     val perfusionIndex: Double? = null,
     val batteryLevel: Int? = null,
     val probeOff: Boolean = false,
-    val pulseSearching: Boolean = false
+    val pulseSearching: Boolean = false,
+    val diagnostics: String = "",
+    val gattSnapshot: String = ""
 )
 
 object Pc60StatusStore {
     private const val PREF = "pc60_status"
     private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
+    private const val MAX_DIAG_CHARS = 12_000
 
     fun save(context: Context, status: Pc60Status) {
         val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
@@ -32,6 +35,8 @@ object Pc60StatusStore {
                 .putString("name", status.deviceName)
                 .putString("address", status.address)
                 .putLong("packet_count", maxOf(currentCount, status.packetCount))
+                .putString("diagnostics", status.diagnostics.takeLast(MAX_DIAG_CHARS))
+                .putString("gatt_snapshot", status.gattSnapshot)
             if (!incomingIsOlder) {
                 e.putLong("last_packet", maxOf(currentLast, status.lastPacketAt))
                     .putString("last_hex", status.lastPacketHex)
@@ -61,8 +66,30 @@ object Pc60StatusStore {
             perfusionIndex = pi.takeUnless { it.isNaN() },
             batteryLevel = p.getInt("battery", -1).takeIf { it >= 0 },
             probeOff = p.getBoolean("probe_off", false),
-            pulseSearching = p.getBoolean("pulse_searching", false)
+            pulseSearching = p.getBoolean("pulse_searching", false),
+            diagnostics = p.getString("diagnostics", "") ?: "",
+            gattSnapshot = p.getString("gatt_snapshot", "") ?: ""
         )
+    }
+
+    fun appendDiagnostic(context: Context, line: String) {
+        synchronized(this) {
+            val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            val current = p.getString("diagnostics", "").orEmpty()
+            val updated = (current + if (current.isBlank()) "" else "\n" + line).takeLast(MAX_DIAG_CHARS)
+            p.edit().putString("diagnostics", updated).apply()
+        }
+    }
+
+    fun setGattSnapshot(context: Context, value: String) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString("gatt_snapshot", value).apply()
+    }
+
+    fun clearDiagnostics(context: Context) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .remove("diagnostics")
+            .remove("gatt_snapshot")
+            .apply()
     }
 
     fun setMonitoringEnabled(context: Context, enabled: Boolean) {
