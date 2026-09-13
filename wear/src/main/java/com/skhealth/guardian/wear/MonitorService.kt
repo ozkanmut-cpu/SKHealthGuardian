@@ -145,23 +145,29 @@ class MonitorService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "skhealth:measurement")
         wake.acquire(12 * 60_000L)
         try {
-            val triggerAt = System.currentTimeMillis()
+            val hrTriggerAt = System.currentTimeMillis()
 
             val hr = measureHeartRateWithRetry()
             if (hr != null) processGeneric(HealthReading(timestampMs = System.currentTimeMillis(), heartRate = hr))
             else recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
 
             val spo2 = measureSpO2WithRetry()
+            var lowSpo2StartedAt: Long? = null
             val followLowSpo2 = if (spo2 != null) {
-                processWatchSpO2(HealthReading(timestampMs = System.currentTimeMillis(), spo2 = spo2))
+                val reading = HealthReading(timestampMs = System.currentTimeMillis(), spo2 = spo2)
+                val follow = processWatchSpO2(reading)
+                if (follow) lowSpo2StartedAt = reading.timestampMs
+                follow
             } else {
                 recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
                 false
             }
 
+            // SpO2 follow-up is time-sensitive. Do it before the slower HR confirmation path.
+            if (followLowSpo2 && lowSpo2StartedAt != null) followLowSpO2(lowSpo2StartedAt)
+
             val confirmHr = hr != null && hr > activeConfig.heartRateHighThreshold
-            if (confirmHr) confirmHeartRate(triggerAt)
-            if (followLowSpo2) followLowSpO2(triggerAt)
+            if (confirmHr) confirmHeartRate(hrTriggerAt)
         } finally {
             if (wake.isHeld) wake.release()
         }
@@ -182,9 +188,9 @@ class MonitorService : Service() {
         else recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
     }
 
-    private suspend fun followLowSpO2(triggerAt: Long) {
-        var nextAt = triggerAt + WATCH_SPO2_FOLLOWUP_INTERVAL_MS
-        val stopAt = triggerAt + WATCH_SPO2_CONFIRMATION_WINDOW_MS
+    private suspend fun followLowSpO2(observationStartedAt: Long) {
+        var nextAt = observationStartedAt + WATCH_SPO2_FOLLOWUP_INTERVAL_MS
+        val stopAt = observationStartedAt + WATCH_SPO2_CONFIRMATION_WINDOW_MS
         while (scope.isActive && nextAt <= stopAt) {
             delayUntil(nextAt)
             val value = runCatching { sensor.measureSpO2(WATCH_SPO2_MEASUREMENT_TIMEOUT_MS) }.getOrNull()
