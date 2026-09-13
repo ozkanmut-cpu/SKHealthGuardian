@@ -14,6 +14,7 @@ import com.skhealth.guardian.shared.AlarmConfig
 import com.skhealth.guardian.shared.AlarmEngine
 import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.WatchSpO2AlarmPolicy
+import com.skhealth.guardian.shared.WatchSpO2AlarmSnapshot
 import com.skhealth.guardian.shared.WatchSpO2Decision
 import com.skhealth.guardian.wear.sensor.SamsungSensorGateway
 import kotlinx.coroutines.*
@@ -43,6 +44,7 @@ class MonitorService : Service() {
         engine = AlarmEngine(activeConfig).also { restoredEngine ->
             WearAlarmEngineStateStore.load(this, engineSignature)?.let(restoredEngine::restore)
         }
+        restoreWatchSpO2Policy()
         sensor = SamsungSensorGateway(this)
         bridge = PhoneBridge(this)
         createChannel()
@@ -156,7 +158,7 @@ class MonitorService : Service() {
             val followLowSpo2 = if (spo2 != null) {
                 val reading = HealthReading(timestampMs = System.currentTimeMillis(), spo2 = spo2)
                 val follow = processWatchSpO2(reading)
-                if (follow) lowSpo2StartedAt = reading.timestampMs
+                if (follow) lowSpo2StartedAt = watchSpO2Policy.snapshot().observationSince ?: reading.timestampMs
                 follow
             } else {
                 recordAndSend(HealthReading(timestampMs = System.currentTimeMillis(), valid = false))
@@ -189,7 +191,7 @@ class MonitorService : Service() {
     }
 
     private suspend fun followLowSpO2(observationStartedAt: Long) {
-        var nextAt = observationStartedAt + WATCH_SPO2_FOLLOWUP_INTERVAL_MS
+        var nextAt = maxOf(System.currentTimeMillis(), observationStartedAt + WATCH_SPO2_FOLLOWUP_INTERVAL_MS)
         val stopAt = observationStartedAt + WATCH_SPO2_CONFIRMATION_WINDOW_MS
         while (scope.isActive && nextAt <= stopAt) {
             delayUntil(nextAt)
@@ -210,6 +212,7 @@ class MonitorService : Service() {
         recordAndSend(reading)
         val spo2 = reading.spo2
         val decision = watchSpO2Policy.evaluate(reading.timestampMs, spo2, reading.valid)
+        persistWatchSpO2Policy()
         when (decision) {
             WatchSpO2Decision.ALARM_IMMEDIATE -> {
                 LocalAlarm.raise(this, AlertEvent(
@@ -233,6 +236,22 @@ class MonitorService : Service() {
             WatchSpO2Decision.NONE -> Unit
         }
         return spo2 != null && spo2 in 75..84
+    }
+
+    private fun restoreWatchSpO2Policy() {
+        val prefs = getSharedPreferences(WATCH_SPO2_POLICY_PREFS, MODE_PRIVATE)
+        val since = if (prefs.contains(KEY_OBSERVATION_SINCE)) prefs.getLong(KEY_OBSERVATION_SINCE, 0L) else null
+        val latched = prefs.getBoolean(KEY_ALARM_LATCHED, false)
+        watchSpO2Policy.restore(WatchSpO2AlarmSnapshot(since, latched))
+    }
+
+    private fun persistWatchSpO2Policy() {
+        val snapshot = watchSpO2Policy.snapshot()
+        val editor = getSharedPreferences(WATCH_SPO2_POLICY_PREFS, MODE_PRIVATE).edit()
+            .putBoolean(KEY_ALARM_LATCHED, snapshot.alarmLatched)
+        if (snapshot.observationSince == null) editor.remove(KEY_OBSERVATION_SINCE)
+        else editor.putLong(KEY_OBSERVATION_SINCE, snapshot.observationSince)
+        editor.apply()
     }
 
     private suspend fun delayUntil(targetMs: Long) {
@@ -296,5 +315,8 @@ class MonitorService : Service() {
         private const val WATCH_SPO2_FOLLOWUP_INTERVAL_MS = 30_000L
         private const val WATCH_SPO2_CONFIRMATION_WINDOW_MS = 3 * 60_000L
         private const val WATCH_SPO2_MEASUREMENT_TIMEOUT_MS = 20_000L
+        private const val WATCH_SPO2_POLICY_PREFS = "watch_spo2_policy"
+        private const val KEY_OBSERVATION_SINCE = "observation_since"
+        private const val KEY_ALARM_LATCHED = "alarm_latched"
     }
 }
