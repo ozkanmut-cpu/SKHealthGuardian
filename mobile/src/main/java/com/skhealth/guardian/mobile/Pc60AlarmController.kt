@@ -38,20 +38,29 @@ class Pc60AlarmController(private val context: Context) {
         val recent = HistoryStore.formatted(context, 4).lines().filter { it.isNotBlank() }
 
         when (policy.evaluate(sample)) {
-            Pc60Decision.ALARM -> {
-                val alert = AlertEvent(
-                    type = AlertType.SPO2_LOW_CONFIRMED,
-                    timestampMs = sample.timestampMs,
-                    reading = reading,
-                    message = "PC-60FW düşük SpO₂ ${AppSettings.pc60ConfirmMinutes(context)} dk boyunca düzelmedi: %${sample.spo2}"
-                )
-                AlertDispatcher(context).dispatch(alert, recent, reading)
-            }
+            Pc60Decision.ALARM_IMMEDIATE -> dispatchSpo2Alert(
+                sample,
+                reading,
+                recent,
+                "PC-60FW SpO₂ %${sample.spo2}: anlık kritik eşik (<%$IMMEDIATE_THRESHOLD)"
+            )
+            Pc60Decision.ALARM_EARLY -> dispatchSpo2Alert(
+                sample,
+                reading,
+                recent,
+                "PC-60FW SpO₂ ilk 3 dakika içinde %$INTERMEDIATE_THRESHOLD üzerine toparlanmadı: %${sample.spo2}"
+            )
+            Pc60Decision.ALARM_TIMEOUT -> dispatchSpo2Alert(
+                sample,
+                reading,
+                recent,
+                "PC-60FW SpO₂ 5 dakika içinde %$FULL_RECOVERY_THRESHOLD üzerine toparlanmadı: %${sample.spo2}"
+            )
             Pc60Decision.RECOVERED -> {
                 AlarmTimelineStore.add(
                     context,
                     "PC-60FW TOPARLANDI",
-                    "SpO₂ %${sample.spo2}; alarm beklemesi iptal edildi"
+                    "SpO₂ %${sample.spo2}; %$FULL_RECOVERY_THRESHOLD üzeri stabil toparlanma doğrulandı"
                 )
             }
             Pc60Decision.NONE -> Unit
@@ -91,26 +100,50 @@ class Pc60AlarmController(private val context: Context) {
         }
     }
 
+    private fun dispatchSpo2Alert(
+        sample: Pc60Sample,
+        reading: HealthReading,
+        recent: List<String>,
+        message: String
+    ) {
+        AlertDispatcher(context).dispatch(
+            AlertEvent(
+                type = AlertType.SPO2_LOW_CONFIRMED,
+                timestampMs = sample.timestampMs,
+                reading = reading,
+                message = message
+            ),
+            recent,
+            reading
+        )
+    }
+
     private fun refreshPolicyIfNeeded() {
         val cfg = AppSettings.load(context)
-        val alarm = AppSettings.pc60AlarmThreshold(context)
-        val confirm = AppSettings.pc60ConfirmMinutes(context)
-        val recovery = AppSettings.pc60RecoveryThreshold(context)
-        val stable = AppSettings.pc60StableSeconds(context)
         val hrConfirmMinutes = AppSettings.watchConfirmMinutes(context)
         val newSignature = listOf(
-            alarm, confirm, recovery, stable,
-            cfg.heartRateHighThreshold, cfg.heartRateHighConfirmCount,
-            cfg.heartRateLowEnabled, cfg.heartRateLowThreshold, cfg.heartRateLowConfirmCount,
+            IMMEDIATE_THRESHOLD,
+            INTERMEDIATE_THRESHOLD,
+            FULL_RECOVERY_THRESHOLD,
+            EARLY_WINDOW_MS,
+            TOTAL_WINDOW_MS,
+            RECOVERY_STABLE_MS,
+            cfg.heartRateHighThreshold,
+            cfg.heartRateHighConfirmCount,
+            cfg.heartRateLowEnabled,
+            cfg.heartRateLowThreshold,
+            cfg.heartRateLowConfirmCount,
             hrConfirmMinutes
         ).joinToString("|")
         if (newSignature == signature) return
         signature = newSignature
         policy.update(
-            alarmThreshold = alarm,
-            confirmDelayMs = confirm * 60_000L,
-            recoveryThreshold = recovery,
-            recoveryStableMs = stable * 1_000L
+            immediateThreshold = IMMEDIATE_THRESHOLD,
+            intermediateThreshold = INTERMEDIATE_THRESHOLD,
+            fullRecoveryThreshold = FULL_RECOVERY_THRESHOLD,
+            earlyWindowMs = EARLY_WINDOW_MS,
+            totalWindowMs = TOTAL_WINDOW_MS,
+            recoveryStableMs = RECOVERY_STABLE_MS
         )
         hrPolicy.update(
             highThreshold = cfg.heartRateHighThreshold,
@@ -120,5 +153,14 @@ class Pc60AlarmController(private val context: Context) {
             lowConfirmCount = cfg.heartRateLowConfirmCount,
             confirmIntervalMs = hrConfirmMinutes * 60_000L
         )
+    }
+
+    companion object {
+        private const val IMMEDIATE_THRESHOLD = 75
+        private const val INTERMEDIATE_THRESHOLD = 85
+        private const val FULL_RECOVERY_THRESHOLD = 90
+        private const val EARLY_WINDOW_MS = 3 * 60_000L
+        private const val TOTAL_WINDOW_MS = 5 * 60_000L
+        private const val RECOVERY_STABLE_MS = 15_000L
     }
 }
