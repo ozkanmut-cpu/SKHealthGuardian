@@ -6,6 +6,7 @@ import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import com.skhealth.guardian.shared.AckReceiptPolicy
 import com.skhealth.guardian.shared.AlarmEngine
+import com.skhealth.guardian.shared.AlertEvent
 import com.skhealth.guardian.shared.AlertIdentity
 import com.skhealth.guardian.shared.AlertType
 import com.skhealth.guardian.shared.ExactAlertResourcePolicy
@@ -13,6 +14,8 @@ import com.skhealth.guardian.shared.HealthReading
 import com.skhealth.guardian.shared.TechnicalAlertReplayPolicy
 import com.skhealth.guardian.shared.TechnicalAlertWireCodec
 import com.skhealth.guardian.shared.TechnicalConnectivityCoalescingPolicy
+import com.skhealth.guardian.shared.WatchSpO2AlarmPolicy
+import com.skhealth.guardian.shared.WatchSpO2Decision
 
 class WearReadingService : WearableListenerService() {
     private var engine: AlarmEngine? = null
@@ -20,6 +23,7 @@ class WearReadingService : WearableListenerService() {
     private var activeStateSignature: String? = null
     private var lastSpo2Pc60: Boolean? = null
     private var lastHrPc60: Boolean? = null
+    private val watchSpO2Policy = WatchSpO2AlarmPolicy()
 
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path == "/health/status") {
@@ -175,6 +179,8 @@ class WearReadingService : WearableListenerService() {
         lastSpo2Pc60 = spo2Pc60
         lastHrPc60 = hrPc60
 
+        if (spo2Pc60) watchSpO2Policy.reset()
+
         if (spo2Pc60 || hrPc60) {
             val detail = when {
                 spo2Pc60 && hrPc60 -> "Watch ölçümü kaydedildi; SpO₂ ve nabız alarm kararı PC-60FW'ye bırakıldı"
@@ -184,11 +190,14 @@ class WearReadingService : WearableListenerService() {
             AlarmTimelineStore.add(this, "KAYNAK ÖNCELİĞİ", detail)
         }
 
+        val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
+        if (!spo2Pc60) dispatchWatchSpO2Decision(reading, recent)
+
         val alarmReading = reading.copy(
-            spo2 = if (spo2Pc60) null else reading.spo2,
+            spo2 = null,
             heartRate = if (hrPc60) null else reading.heartRate
         )
-        if (alarmReading.spo2 == null && alarmReading.heartRate == null) return
+        if (alarmReading.heartRate == null) return
 
         val e = if (engine == null || activeConfig != cfg || activeStateSignature != stateSignature) {
             activeConfig = cfg
@@ -199,10 +208,29 @@ class WearReadingService : WearableListenerService() {
             }
         } else engine!!
 
-        val recent = HistoryStore.formatted(this, 4).lines().filter { it.isNotBlank() }
         val alerts = e.evaluate(alarmReading)
         AlarmEngineStateStore.save(this, stateSignature, e.snapshot())
         alerts.forEach { AlertDispatcher(this).dispatch(it, recent, alarmReading) }
+    }
+
+    private fun dispatchWatchSpO2Decision(reading: HealthReading, recent: List<String>) {
+        val decision = watchSpO2Policy.evaluate(reading.timestampMs, reading.spo2, reading.valid)
+        val alert = when (decision) {
+            WatchSpO2Decision.ALARM_IMMEDIATE -> AlertEvent(
+                AlertType.SPO2_CRITICAL,
+                reading.timestampMs,
+                reading,
+                "Saat SpO₂ kritik: %${reading.spo2}"
+            )
+            WatchSpO2Decision.ALARM_EARLY -> AlertEvent(
+                AlertType.SPO2_LOW_CONFIRMED,
+                reading.timestampMs,
+                reading,
+                "Saat SpO₂ 3 dakika boyunca %85 altından toparlanmadı: %${reading.spo2}"
+            )
+            WatchSpO2Decision.RECOVERED, WatchSpO2Decision.NONE -> null
+        }
+        if (alert != null) AlertDispatcher(this).dispatch(alert, recent, reading)
     }
 
     private fun sendAckReceipt(nodeId: String, receiptPayload: String) {
