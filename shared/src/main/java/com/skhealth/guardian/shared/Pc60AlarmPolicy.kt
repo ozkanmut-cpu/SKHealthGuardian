@@ -1,36 +1,58 @@
 package com.skhealth.guardian.shared
 
-enum class Pc60Decision { NONE, RECOVERED, ALARM }
+enum class Pc60Decision {
+    NONE,
+    RECOVERED,
+    ALARM_IMMEDIATE,
+    ALARM_EARLY,
+    ALARM_TIMEOUT
+}
 
 /**
- * Intermittent fingertip oximeter policy.
- * A valid SpO2 at or below alarmThreshold starts a confirmation window.
- * If SpO2 remains above recoveryThreshold for recoveryStableMs, the pending
- * alarm is cancelled. Invalid signal resets the pending session so probe-off
- * or searching time never counts toward the confirmation delay.
+ * Continuous fingertip oximeter policy for PC-60FW.
+ *
+ * User-configured staged behavior:
+ * - SpO2 < immediateThreshold: alarm immediately.
+ * - Otherwise, any valid reading below fullRecoveryThreshold starts an observation session.
+ * - By earlyWindowMs the signal must have recovered to at least intermediateThreshold;
+ *   otherwise alarm early.
+ * - Even after reaching intermediateThreshold, recovery is not complete until SpO2 stays at or
+ *   above fullRecoveryThreshold for recoveryStableMs.
+ * - If that full recovery does not happen by totalWindowMs, alarm.
+ *
+ * Invalid/probe-off/searching samples never count toward a health alarm and reset the session.
  */
 class Pc60AlarmPolicy(
-    private var alarmThreshold: Int = 85,
-    private var confirmDelayMs: Long = 2 * 60_000L,
-    private var recoveryThreshold: Int = 85,
-    private var recoveryStableMs: Long = 10_000L
+    private var immediateThreshold: Int = 75,
+    private var intermediateThreshold: Int = 85,
+    private var fullRecoveryThreshold: Int = 90,
+    private var earlyWindowMs: Long = 3 * 60_000L,
+    private var totalWindowMs: Long = 5 * 60_000L,
+    private var recoveryStableMs: Long = 15_000L
 ) {
-    private var lowSince: Long? = null
-    private var recoverySince: Long? = null
+    private var observationSince: Long? = null
+    private var fullRecoverySince: Long? = null
+    private var alarmLatched = false
 
     fun update(
-        alarmThreshold: Int,
-        confirmDelayMs: Long,
-        recoveryThreshold: Int,
+        immediateThreshold: Int,
+        intermediateThreshold: Int,
+        fullRecoveryThreshold: Int,
+        earlyWindowMs: Long,
+        totalWindowMs: Long,
         recoveryStableMs: Long
     ) {
-        val changed = this.alarmThreshold != alarmThreshold ||
-            this.confirmDelayMs != confirmDelayMs ||
-            this.recoveryThreshold != recoveryThreshold ||
+        val changed = this.immediateThreshold != immediateThreshold ||
+            this.intermediateThreshold != intermediateThreshold ||
+            this.fullRecoveryThreshold != fullRecoveryThreshold ||
+            this.earlyWindowMs != earlyWindowMs ||
+            this.totalWindowMs != totalWindowMs ||
             this.recoveryStableMs != recoveryStableMs
-        this.alarmThreshold = alarmThreshold
-        this.confirmDelayMs = confirmDelayMs
-        this.recoveryThreshold = recoveryThreshold
+        this.immediateThreshold = immediateThreshold
+        this.intermediateThreshold = intermediateThreshold
+        this.fullRecoveryThreshold = fullRecoveryThreshold
+        this.earlyWindowMs = earlyWindowMs
+        this.totalWindowMs = totalWindowMs
         this.recoveryStableMs = recoveryStableMs
         if (changed) reset()
     }
@@ -44,37 +66,70 @@ class Pc60AlarmPolicy(
         val now = sample.timestampMs
         val spo2 = sample.spo2
 
-        if (spo2 <= alarmThreshold) {
-            recoverySince = null
-            val since = lowSince
-            if (since == null) {
-                lowSince = now
-                return Pc60Decision.NONE
-            }
-            if (now - since >= confirmDelayMs) {
-                reset()
-                return Pc60Decision.ALARM
-            }
-            return Pc60Decision.NONE
+        if (alarmLatched) {
+            return evaluateRecoveryAfterAlarm(now, spo2)
         }
 
-        if (lowSince != null && spo2 > recoveryThreshold) {
-            val since = recoverySince
+        if (spo2 < immediateThreshold) {
+            observationSince = now
+            fullRecoverySince = null
+            alarmLatched = true
+            return Pc60Decision.ALARM_IMMEDIATE
+        }
+
+        if (observationSince == null) {
+            if (spo2 >= fullRecoveryThreshold) return Pc60Decision.NONE
+            observationSince = now
+        }
+
+        if (spo2 >= fullRecoveryThreshold) {
+            val since = fullRecoverySince
             if (since == null) {
-                recoverySince = now
+                fullRecoverySince = now
             } else if (now - since >= recoveryStableMs) {
                 reset()
                 return Pc60Decision.RECOVERED
             }
-        } else if (spo2 <= recoveryThreshold) {
-            recoverySince = null
+        } else {
+            fullRecoverySince = null
+        }
+
+        val started = observationSince ?: return Pc60Decision.NONE
+        val elapsed = now - started
+
+        if (elapsed >= earlyWindowMs && spo2 < intermediateThreshold) {
+            alarmLatched = true
+            fullRecoverySince = null
+            return Pc60Decision.ALARM_EARLY
+        }
+
+        if (elapsed >= totalWindowMs) {
+            alarmLatched = true
+            fullRecoverySince = null
+            return Pc60Decision.ALARM_TIMEOUT
         }
 
         return Pc60Decision.NONE
     }
 
+    private fun evaluateRecoveryAfterAlarm(now: Long, spo2: Int): Pc60Decision {
+        if (spo2 >= fullRecoveryThreshold) {
+            val since = fullRecoverySince
+            if (since == null) {
+                fullRecoverySince = now
+            } else if (now - since >= recoveryStableMs) {
+                reset()
+                return Pc60Decision.RECOVERED
+            }
+        } else {
+            fullRecoverySince = null
+        }
+        return Pc60Decision.NONE
+    }
+
     fun reset() {
-        lowSince = null
-        recoverySince = null
+        observationSince = null
+        fullRecoverySince = null
+        alarmLatched = false
     }
 }
