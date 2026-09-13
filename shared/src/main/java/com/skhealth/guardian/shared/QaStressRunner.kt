@@ -24,10 +24,6 @@ data class QaStressReport(
     val totalElapsedMs: Long get() = results.sumOf { it.elapsedMs }
 }
 
-/**
- * CPU/memory safe deterministic load tests for the production alarm policies.
- * No Android API, network, SMS, call or physical sensor is touched here.
- */
 object QaStressRunner {
     fun run(config: AlarmConfig = AlarmConfig(), scale: Int = 1): QaStressReport {
         val s = scale.coerceIn(1, 20)
@@ -114,26 +110,37 @@ object QaStressRunner {
     }
 
     private fun pc60Soak(n: Int): QaStressResult = timed("pc60-soak", "PC-60FW uzun akış", n) {
-        val p = Pc60AlarmPolicy(alarmThreshold = 85, confirmDelayMs = 120_000L, recoveryThreshold = 85, recoveryStableMs = 10_000L)
+        val p = Pc60AlarmPolicy(
+            immediateThreshold = 75,
+            intermediateThreshold = 85,
+            fullRecoveryThreshold = 90,
+            earlyWindowMs = 180_000L,
+            totalWindowMs = 300_000L,
+            recoveryStableMs = 15_000L
+        )
         var alarms = 0
         var recovered = 0
         repeat(n) { i ->
-            // 5 dk normal, 121 sn düşük (alarm 120 sn'de tetiklenir), ardından normal dönem.
-            // Politika ALARM verdiğinde pending session'ı resetlediği için bu döngüde RECOVERED beklenmez.
-            val cycle = i % 440
+            // 300 sn normal, 181 sn 84% (3. dakikada erken alarm), sonra 19 sn >=90% recovery.
+            val cycle = i % 500
             val spo2 = when {
                 cycle < 300 -> 97
-                cycle < 421 -> 84
-                else -> 86
+                cycle < 481 -> 84
+                else -> 91
             }
             when (p.evaluate(Pc60Sample(i * 1000L, spo2, 78, 4.0, probeOff = false, pulseSearching = false))) {
-                Pc60Decision.ALARM -> alarms++
+                Pc60Decision.ALARM_IMMEDIATE,
+                Pc60Decision.ALARM_EARLY,
+                Pc60Decision.ALARM_TIMEOUT -> alarms++
                 Pc60Decision.RECOVERED -> recovered++
-                else -> Unit
+                Pc60Decision.NONE -> Unit
             }
         }
-        val completedCycles = n / 440
-        Check(alarms in completedCycles..(completedCycles + 1) && recovered == 0, "alarm=$alarms cycle≈$completedCycles recovery=$recovered")
+        val completedCycles = n / 500
+        Check(
+            alarms in completedCycles..(completedCycles + 1) && recovered in completedCycles..(completedCycles + 1),
+            "alarm=$alarms cycle≈$completedCycles recovery=$recovered"
+        )
     }
 
     private fun deterministicFuzz(config: AlarmConfig, n: Int): QaStressResult = timed("deterministic-fuzz", "Deterministik izole fuzz", n) {
@@ -155,7 +162,6 @@ object QaStressRunner {
                     HealthReading(timestampMs = baseTs + 1_000L, spo2 = spo2, heartRate = hr, valid = true)
                 ).count { it.type == AlertType.SPO2_CRITICAL }
             }
-            // Isolate the next fuzz case from this case's episode state.
             e.evaluate(
                 HealthReading(
                     timestampMs = baseTs + 2_000L,
