@@ -15,6 +15,7 @@ import com.skhealth.guardian.shared.TechnicalAlertReplayPolicy
 import com.skhealth.guardian.shared.TechnicalAlertWireCodec
 import com.skhealth.guardian.shared.TechnicalConnectivityCoalescingPolicy
 import com.skhealth.guardian.shared.WatchSpO2AlarmPolicy
+import com.skhealth.guardian.shared.WatchSpO2AlarmSnapshot
 import com.skhealth.guardian.shared.WatchSpO2Decision
 
 class WearReadingService : WearableListenerService() {
@@ -24,6 +25,11 @@ class WearReadingService : WearableListenerService() {
     private var lastSpo2Pc60: Boolean? = null
     private var lastHrPc60: Boolean? = null
     private val watchSpO2Policy = WatchSpO2AlarmPolicy()
+
+    override fun onCreate() {
+        super.onCreate()
+        restoreWatchSpO2Policy()
+    }
 
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path == "/health/status") {
@@ -179,7 +185,10 @@ class WearReadingService : WearableListenerService() {
         lastSpo2Pc60 = spo2Pc60
         lastHrPc60 = hrPc60
 
-        if (spo2Pc60) watchSpO2Policy.reset()
+        if (spo2Pc60) {
+            watchSpO2Policy.reset()
+            persistWatchSpO2Policy()
+        }
 
         if (spo2Pc60 || hrPc60) {
             val detail = when {
@@ -215,6 +224,7 @@ class WearReadingService : WearableListenerService() {
 
     private fun dispatchWatchSpO2Decision(reading: HealthReading, recent: List<String>) {
         val decision = watchSpO2Policy.evaluate(reading.timestampMs, reading.spo2, reading.valid)
+        persistWatchSpO2Policy()
         val alert = when (decision) {
             WatchSpO2Decision.ALARM_IMMEDIATE -> AlertEvent(
                 AlertType.SPO2_CRITICAL,
@@ -233,6 +243,22 @@ class WearReadingService : WearableListenerService() {
         if (alert != null) AlertDispatcher(this).dispatch(alert, recent, reading)
     }
 
+    private fun restoreWatchSpO2Policy() {
+        val prefs = getSharedPreferences(WATCH_SPO2_POLICY_PREFS, MODE_PRIVATE)
+        val since = if (prefs.contains(KEY_OBSERVATION_SINCE)) prefs.getLong(KEY_OBSERVATION_SINCE, 0L) else null
+        val latched = prefs.getBoolean(KEY_ALARM_LATCHED, false)
+        watchSpO2Policy.restore(WatchSpO2AlarmSnapshot(since, latched))
+    }
+
+    private fun persistWatchSpO2Policy() {
+        val snapshot = watchSpO2Policy.snapshot()
+        val editor = getSharedPreferences(WATCH_SPO2_POLICY_PREFS, MODE_PRIVATE).edit()
+            .putBoolean(KEY_ALARM_LATCHED, snapshot.alarmLatched)
+        if (snapshot.observationSince == null) editor.remove(KEY_OBSERVATION_SINCE)
+        else editor.putLong(KEY_OBSERVATION_SINCE, snapshot.observationSince)
+        editor.apply()
+    }
+
     private fun sendAckReceipt(nodeId: String, receiptPayload: String) {
         if (nodeId.isBlank() || receiptPayload.isBlank()) return
         Wearable.getMessageClient(this)
@@ -241,5 +267,8 @@ class WearReadingService : WearableListenerService() {
 
     companion object {
         private const val MIN_LIVE_REPLAY_AGE_MS = 10 * 60_000L
+        private const val WATCH_SPO2_POLICY_PREFS = "watch_spo2_policy"
+        private const val KEY_OBSERVATION_SINCE = "observation_since"
+        private const val KEY_ALARM_LATCHED = "alarm_latched"
     }
 }
