@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * Cross-policy integration scenarios for the two SpO2 sources.
  * These tests intentionally stay in the shared module so CI can exercise
- * source priority + PC60 persistence rules without Android dependencies.
+ * source priority + PC60 staged alarm rules without Android dependencies.
  */
 class HealthSourceIntegrationTest {
     private fun pc60(
@@ -23,6 +23,15 @@ class HealthSourceIntegrationTest {
         perfusionIndex = if (valid) 4.0 else 0.0,
         probeOff = !valid,
         pulseSearching = pulseSearching
+    )
+
+    private fun stagedPolicy() = Pc60AlarmPolicy(
+        immediateThreshold = 75,
+        intermediateThreshold = 85,
+        fullRecoveryThreshold = 90,
+        earlyWindowMs = 3 * 60_000L,
+        totalWindowMs = 5 * 60_000L,
+        recoveryStableMs = 15_000L
     )
 
     @Test
@@ -51,37 +60,32 @@ class HealthSourceIntegrationTest {
     }
 
     @Test
-    fun pc60LowPersistenceAlarmsAtTwoMinutesWhileWatchRemainsSecondary() {
-        val policy = Pc60AlarmPolicy(
-            alarmThreshold = 85,
-            confirmDelayMs = 120_000L,
-            recoveryThreshold = 85,
-            recoveryStableMs = 10_000L
-        )
+    fun pc60Below85AlarmsAtThreeMinutesWhileWatchRemainsSecondary() {
+        val policy = stagedPolicy()
 
         assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(1_000L, 84)))
-        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(60_000L, 83)))
-        assertEquals(Pc60Decision.ALARM, policy.evaluate(pc60(121_000L, 82)))
+        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(120_000L, 83)))
+        assertEquals(Pc60Decision.ALARM_EARLY, policy.evaluate(pc60(181_000L, 82)))
     }
 
     @Test
-    fun stableRecoveryCancelsPendingPc60AlarmAndLaterLowStartsNewWindow() {
-        val policy = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
+    fun stableRecoveryAt90CancelsPendingPc60AlarmAndLaterLowStartsNewWindow() {
+        val policy = stagedPolicy()
 
         assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(0L, 84)))
-        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(30_000L, 86)))
-        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(39_999L, 87)))
-        assertEquals(Pc60Decision.RECOVERED, policy.evaluate(pc60(40_000L, 88)))
+        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(60_000L, 86)))
+        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(100_000L, 90)))
+        assertEquals(Pc60Decision.RECOVERED, policy.evaluate(pc60(115_000L, 91)))
 
-        // A new low episode must get a fresh full confirmation window.
-        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(50_000L, 84)))
-        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(169_999L, 84)))
-        assertEquals(Pc60Decision.ALARM, policy.evaluate(pc60(170_000L, 84)))
+        // A new low episode must get a fresh staged observation window.
+        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(130_000L, 84)))
+        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(309_999L, 84)))
+        assertEquals(Pc60Decision.ALARM_EARLY, policy.evaluate(pc60(310_000L, 84)))
     }
 
     @Test
     fun probeOffInvalidatesPc60AuthorityAndResetsPendingLowSession() {
-        val policy = Pc60AlarmPolicy(85, 120_000L, 85, 10_000L)
+        val policy = stagedPolicy()
 
         assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(0L, 82)))
         assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(60_000L, 0, valid = false)))
@@ -96,9 +100,10 @@ class HealthSourceIntegrationTest {
             )
         )
 
-        // The previous 60 seconds must not count after probe-off.
+        // The previous minute must not count after probe-off.
         assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(120_000L, 82)))
-        assertEquals(Pc60Decision.ALARM, policy.evaluate(pc60(240_000L, 82)))
+        assertEquals(Pc60Decision.NONE, policy.evaluate(pc60(299_999L, 82)))
+        assertEquals(Pc60Decision.ALARM_EARLY, policy.evaluate(pc60(300_000L, 82)))
     }
 
     @Test
