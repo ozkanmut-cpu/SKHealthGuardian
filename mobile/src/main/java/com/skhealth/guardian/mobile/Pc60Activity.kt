@@ -2,6 +2,9 @@ package com.skhealth.guardian.mobile
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -10,6 +13,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
@@ -103,14 +107,43 @@ class Pc60Activity : Activity() {
             }
         }, UiStyle.sectionParams(this))
 
-        root.addView(action(SkIcon.SEARCH, "Cihazı yeniden tara", "PC-60FW için yeni tarama başlat", UiStyle.BLUE) {
+        root.addView(action(SkIcon.SEARCH, "Cihazı yeniden tara", "PC-60FW için yeni tarama ve BLE tanılama başlat", UiStyle.BLUE) {
             if (!blePermissionsReady()) requestBlePermissions() else {
                 Pc60StatusStore.setMonitoringEnabled(this, true)
                 ContextCompat.startForegroundService(this, Intent(this, Pc60BleService::class.java).setAction(Pc60BleService.ACTION_RESCAN))
             }
         }, UiStyle.sectionParams(this))
 
-        root.addView(action(SkIcon.REFRESH, "Durumu yenile", "Ekrandaki canlı bilgileri güncelle", UiStyle.TEXT) { render() }, UiStyle.sectionParams(this))
+        root.addView(action(SkIcon.REFRESH, "Durumu yenile", "Ekrandaki canlı bilgileri ve tanılamayı güncelle", UiStyle.TEXT) { render() }, UiStyle.sectionParams(this))
+
+        val diagCard = UiStyle.card(this)
+        diagCard.addView(UiStyle.iconLabel(this, SkIcon.INFO, "BLE tanılama", UiStyle.BLUE, UiStyle.TEXT, 22, 16f, true))
+        diagCard.addView(UiStyle.text(this, "Gerçek cihazın GATT servisleri, karakteristikleri ve bağlantı olayları burada görünür.", 13f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@Pc60Activity, 6), 0, 0) })
+        val snapshot = s.gattSnapshot.ifBlank { "GATT servis haritası henüz alınmadı." }
+        diagCard.addView(UiStyle.text(this, snapshot, 11.5f, UiStyle.TEXT).apply { setPadding(0, UiStyle.dp(this@Pc60Activity, 10), 0, 0); typeface = android.graphics.Typeface.MONOSPACE })
+        val log = s.diagnostics.ifBlank { "Tanılama kaydı henüz yok. 'Cihazı yeniden tara' düğmesine bas." }
+        diagCard.addView(UiStyle.text(this, log, 11f, UiStyle.MUTED).apply { setPadding(0, UiStyle.dp(this@Pc60Activity, 12), 0, 0); typeface = android.graphics.Typeface.MONOSPACE })
+        root.addView(diagCard, UiStyle.sectionParams(this))
+
+        root.addView(action(SkIcon.INFO, "Tanılamayı kopyala", "GATT haritası ve BLE olaylarını panoya kopyala", UiStyle.BLUE) {
+            val latest = Pc60StatusStore.load(this)
+            val report = buildString {
+                appendLine("Orko Takip • PC-60FW BLE tanılama")
+                appendLine("Durum: ${latest.state}")
+                appendLine("Cihaz: ${latest.deviceName.ifBlank { "—" }}")
+                appendLine("Paket: ${latest.packetCount}; son=${latest.lastPacketHex.ifBlank { "—" }}")
+                appendLine()
+                appendLine("GATT:")
+                appendLine(latest.gattSnapshot.ifBlank { "—" })
+                appendLine()
+                appendLine("Olaylar:")
+                append(latest.diagnostics.ifBlank { "—" })
+            }
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("PC-60FW BLE tanılama", report))
+            Toast.makeText(this, "BLE tanılama panoya kopyalandı", Toast.LENGTH_SHORT).show()
+        }, UiStyle.sectionParams(this))
+
         root.addView(action(SkIcon.LINK_OFF, "İzlemeyi durdur", "PC-60FW servisini kapat", UiStyle.RED) {
             Pc60StatusStore.setMonitoringEnabled(this, false)
             stopService(Intent(this, Pc60BleService::class.java))
