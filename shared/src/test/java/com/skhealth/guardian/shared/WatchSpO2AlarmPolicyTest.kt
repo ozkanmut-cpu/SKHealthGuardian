@@ -55,4 +55,14 @@ class WatchSpO2AlarmPolicyTest {
         assertEquals(WatchSpO2Decision.NONE, p.evaluate(120_000L, 80, true))
         assertEquals(WatchSpO2Decision.ALARM_EARLY, p.evaluate(300_000L, 84, true))
     }
+
+    @Test
+    fun restoredLowEpisodeKeepsOriginalThreeMinuteWindow() {
+        val first = WatchSpO2AlarmPolicy()
+        assertEquals(WatchSpO2Decision.NONE, first.evaluate(10_000L, 82, true))
+
+        val restored = WatchSpO2AlarmPolicy().also { it.restore(first.snapshot()) }
+        assertEquals(WatchSpO2Decision.NONE, restored.evaluate(160_000L, 83, true))
+        assertEquals(WatchSpO2Decision.ALARM_EARLY, restored.evaluate(190_000L, 84, true))
+    }
 }
