@@ -38,26 +38,28 @@ object WearSettings {
     fun saveTiming(context: Context, payload: ByteArray) {
         val p = String(payload).split('|')
         if (p.size < 13) return
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
-            .putInt("measurement_minutes", p[9].toIntOrNull()?.coerceIn(1, 60) ?: 5)
-            .putInt("confirm_minutes", p[10].toIntOrNull()?.coerceIn(1, 10) ?: 2)
-            .putInt("retry1_seconds", p[11].toIntOrNull()?.coerceIn(5, 300) ?: 30)
-            .putInt("retry2_seconds", p[12].toIntOrNull()?.coerceIn(5, 600) ?: 60)
-            .apply()
+        val e = context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putInt("measurement_minutes", p[9].toIntOrNull()?.coerceIn(1,60) ?: 5)
+            .putInt("confirm_minutes", p[10].toIntOrNull()?.coerceIn(1,10) ?: 2)
+            .putInt("retry1_seconds", p[11].toIntOrNull()?.coerceIn(5,300) ?: 30)
+            .putInt("retry2_seconds", p[12].toIntOrNull()?.coerceIn(5,600) ?: 60)
+        if (p.size >= 17) {
+            e.putInt("watch_spo2_immediate_threshold", p[13].toIntOrNull()?.coerceIn(50,84) ?: 75)
+                .putInt("watch_spo2_recovery_threshold", p[14].toIntOrNull()?.coerceIn(51,99) ?: 85)
+                .putInt("watch_spo2_confirmation_minutes", p[15].toIntOrNull()?.coerceIn(1,10) ?: 3)
+                .putInt("watch_spo2_followup_seconds", p[16].toIntOrNull()?.coerceIn(15,120) ?: 30)
+        }
+        e.apply()
     }
 
-    fun measurementIntervalMs(context: Context): Long =
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("measurement_minutes", 5) * 60_000L
+    fun measurementIntervalMs(context: Context): Long = context.getSharedPreferences(PREF,Context.MODE_PRIVATE).getInt("measurement_minutes",5)*60_000L
+    fun confirmDelayMs(context: Context): Long = context.getSharedPreferences(PREF,Context.MODE_PRIVATE).getInt("confirm_minutes",2)*60_000L
+    fun retryWaitsMs(context: Context): List<Long> { val p=context.getSharedPreferences(PREF,Context.MODE_PRIVATE);return listOf(0L,p.getInt("retry1_seconds",30)*1_000L,p.getInt("retry2_seconds",60)*1_000L) }
 
-    fun confirmDelayMs(context: Context): Long =
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("confirm_minutes", 2) * 60_000L
-
-    fun retryWaitsMs(context: Context): List<Long> {
-        val p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        val r1 = p.getInt("retry1_seconds", 30).toLong() * 1_000L
-        val r2 = p.getInt("retry2_seconds", 60).toLong() * 1_000L
-        return listOf(0L, r1, r2)
-    }
+    fun watchSpO2ImmediateThreshold(context: Context): Int = context.getSharedPreferences(PREF,Context.MODE_PRIVATE).getInt("watch_spo2_immediate_threshold",75)
+    fun watchSpO2RecoveryThreshold(context: Context): Int = context.getSharedPreferences(PREF,Context.MODE_PRIVATE).getInt("watch_spo2_recovery_threshold",85)
+    fun watchSpO2ConfirmationMs(context: Context): Long = context.getSharedPreferences(PREF,Context.MODE_PRIVATE).getInt("watch_spo2_confirmation_minutes",3)*60_000L
+    fun watchSpO2FollowupMs(context: Context): Long = context.getSharedPreferences(PREF,Context.MODE_PRIVATE).getInt("watch_spo2_followup_seconds",30)*1_000L
 
     fun decode(payload: ByteArray): AlarmConfig? {
         val p = String(payload).split('|')
