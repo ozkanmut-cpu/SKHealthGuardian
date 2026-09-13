@@ -68,20 +68,34 @@ object QaScenarioRunner {
     }
 
     private fun pc60LowPersists(): QaScenarioResult {
-        val policy = Pc60AlarmPolicy(alarmThreshold = 85, confirmDelayMs = 120_000L, recoveryThreshold = 85, recoveryStableMs = 10_000L)
+        val policy = Pc60AlarmPolicy(
+            immediateThreshold = 75,
+            intermediateThreshold = 85,
+            fullRecoveryThreshold = 90,
+            earlyWindowMs = 180_000L,
+            totalWindowMs = 300_000L,
+            recoveryStableMs = 15_000L
+        )
         val first = policy.evaluate(pc(1_000L, 84, 78))
-        val second = policy.evaluate(pc(121_000L, 84, 78))
-        val ok = first == Pc60Decision.NONE && second == Pc60Decision.ALARM
-        return result("pc60-low", "PC-60FW düşük SpO₂ 2 dk", ok, "2 dakika düşük kalırsa alarm", "$first → $second", "84% sabit")
+        val second = policy.evaluate(pc(181_000L, 84, 78))
+        val ok = first == Pc60Decision.NONE && second == Pc60Decision.ALARM_EARLY
+        return result("pc60-low", "PC-60FW düşük SpO₂ 3 dk", ok, "3 dakika sonunda <85 ise erken alarm", "$first → $second", "84% sabit")
     }
 
     private fun pc60Recovers(): QaScenarioResult {
-        val policy = Pc60AlarmPolicy(alarmThreshold = 85, confirmDelayMs = 120_000L, recoveryThreshold = 85, recoveryStableMs = 10_000L)
+        val policy = Pc60AlarmPolicy(
+            immediateThreshold = 75,
+            intermediateThreshold = 85,
+            fullRecoveryThreshold = 90,
+            earlyWindowMs = 180_000L,
+            totalWindowMs = 300_000L,
+            recoveryStableMs = 15_000L
+        )
         val first = policy.evaluate(pc(1_000L, 84, 78))
-        val recoveryStart = policy.evaluate(pc(60_000L, 86, 78))
-        val recovered = policy.evaluate(pc(71_000L, 86, 78))
+        val recoveryStart = policy.evaluate(pc(60_000L, 90, 78))
+        val recovered = policy.evaluate(pc(75_000L, 91, 78))
         val ok = first == Pc60Decision.NONE && recoveryStart == Pc60Decision.NONE && recovered == Pc60Decision.RECOVERED
-        return result("pc60-recover", "PC-60FW toparlanma", ok, ">85% en az 10 sn sabitse alarm iptal", "$first → $recoveryStart → $recovered", "84% → 86%")
+        return result("pc60-recover", "PC-60FW toparlanma", ok, ">=90% en az 15 sn sabitse pencere kapanır", "$first → $recoveryStart → $recovered", "84% → 90% → 91%")
     }
 
     private fun pc60HighHrPersists(config: AlarmConfig): QaScenarioResult {
