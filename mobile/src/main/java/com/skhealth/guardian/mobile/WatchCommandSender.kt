@@ -22,16 +22,18 @@ class WatchCommandSender(private val context: Context) {
             AppSettings.watchMeasurementMinutes(context),
             AppSettings.watchConfirmMinutes(context),
             AppSettings.watchRetry1Seconds(context),
-            AppSettings.watchRetry2Seconds(context)
+            AppSettings.watchRetry2Seconds(context),
+            AppSettings.watchSpo2ImmediateThreshold(context),
+            AppSettings.watchSpo2RecoveryThreshold(context),
+            AppSettings.watchSpo2ConfirmationMinutes(context),
+            AppSettings.watchSpo2FollowupSeconds(context)
         ).joinToString("|").toByteArray()
         send("/health/config", payload)
     }
 
     private fun send(path: String, payload: ByteArray) {
         Wearable.getNodeClient(context).connectedNodes.addOnSuccessListener { nodes ->
-            nodes.forEach { node ->
-                Wearable.getMessageClient(context).sendMessage(node.id, path, payload)
-            }
+            nodes.forEach { node -> Wearable.getMessageClient(context).sendMessage(node.id, path, payload) }
         }
     }
 }
