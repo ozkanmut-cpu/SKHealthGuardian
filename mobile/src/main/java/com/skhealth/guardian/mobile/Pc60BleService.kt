@@ -30,6 +30,7 @@ class Pc60BleService : Service() {
     private var currentAddress = ""
     private var streamStartedAt = 0L
     private var lastDataAt = 0L
+    private var lastMeasurementAt = 0L
     private var noDataRecoveryAttempts = 0
     private lateinit var sdkRuntime: Pc60SdkRuntime
     private lateinit var alarmController: Pc60AlarmController
@@ -75,6 +76,7 @@ class Pc60BleService : Service() {
 
     private fun onSdkSample(sample: Pc60Sample) {
         markDataReceived(); packetCount += 1
+        if (sample.valid) lastMeasurementAt = sample.timestampMs
         val old = Pc60StatusStore.load(this)
         Pc60StatusStore.save(this, old.copy(state=if(sample.valid) "Bağlı; Lepu RtParam geliyor" else "Bağlı; ölçüm stabilizasyonu bekleniyor", deviceName=old.deviceName.ifBlank{"PC-60FW"}, lastPacketAt=sample.timestampMs, packetCount=packetCount, spo2=sample.spo2, heartRate=sample.pulseRate, perfusionIndex=sample.perfusionIndex, batteryLevel=sample.batteryLevel, probeOff=sample.probeOff, pulseSearching=sample.pulseSearching))
         alarmController.onSample(sample)
@@ -119,12 +121,12 @@ class Pc60BleService : Service() {
 
     private fun onPacket(bytes:ByteArray){
         markDataReceived();packetCount+=1;val now=System.currentTimeMillis();val old=Pc60StatusStore.load(this);val hex=bytes.take(48).joinToString(" "){"%02X".format(it.toInt() and 0xFF)};val sample=Pc60RawPacketParser.parseMeasurement(bytes,now)
-        if(sample!=null){Pc60StatusStore.save(this,old.copy(state=if(sample.valid)"Bağlı; PC-60FW ölçümü geliyor" else "Bağlı; ölçüm stabilizasyonu bekleniyor",deviceName=currentName,address=currentAddress,lastPacketAt=now,packetCount=packetCount,lastPacketHex=hex,spo2=sample.spo2,heartRate=sample.pulseRate,perfusionIndex=sample.perfusionIndex,probeOff=sample.probeOff,pulseSearching=sample.pulseSearching));diag("MEAS SpO2=${sample.spo2} HR=${sample.pulseRate} PI=${sample.perfusionIndex} valid=${sample.valid}");alarmController.onSample(sample)}else{val battery=Pc60RawPacketParser.parseBatteryLevel(bytes);Pc60StatusStore.save(this,old.copy(state="Bağlı; ham BLE verisi geliyor",deviceName=currentName,address=currentAddress,lastPacketAt=now,packetCount=packetCount,lastPacketHex=hex,batteryLevel=battery?:old.batteryLevel))}
+        if(sample!=null){if(sample.valid)lastMeasurementAt=now;Pc60StatusStore.save(this,old.copy(state=if(sample.valid)"Bağlı; PC-60FW ölçümü geliyor" else "Bağlı; ölçüm stabilizasyonu bekleniyor",deviceName=currentName,address=currentAddress,lastPacketAt=now,packetCount=packetCount,lastPacketHex=hex,spo2=sample.spo2,heartRate=sample.pulseRate,perfusionIndex=sample.perfusionIndex,probeOff=sample.probeOff,pulseSearching=sample.pulseSearching));diag("MEAS SpO2=${sample.spo2} HR=${sample.pulseRate} PI=${sample.perfusionIndex} valid=${sample.valid}");alarmController.onSample(sample)}else{val battery=Pc60RawPacketParser.parseBatteryLevel(bytes);val recentMeasurement=lastMeasurementAt>0L&&now-lastMeasurementAt<=MEASUREMENT_STATE_HOLD_MS;val state=if(recentMeasurement)"Bağlı; PC-60FW ölçümü geliyor" else "Bağlı; ham BLE verisi geliyor";Pc60StatusStore.save(this,old.copy(state=state,deviceName=currentName,address=currentAddress,lastPacketAt=now,packetCount=packetCount,lastPacketHex=hex,batteryLevel=battery?:old.batteryLevel))}
     }
 
     private fun markStreamStarted(){if(streamStartedAt==0L)streamStartedAt=System.currentTimeMillis()}
     private fun markDataReceived(){lastDataAt=System.currentTimeMillis();streamStartedAt=lastDataAt;noDataRecoveryAttempts=0}
-    private fun resetDataWatch(){streamStartedAt=0;lastDataAt=0;noDataRecoveryAttempts=0}
+    private fun resetDataWatch(){streamStartedAt=0;lastDataAt=0;lastMeasurementAt=0;noDataRecoveryAttempts=0;Pc60RawPacketParser.reset()}
     private fun checkDataFlow(){val started=streamStartedAt;if(started==0L)return;val now=System.currentTimeMillis();val ref=if(lastDataAt>0)lastDataAt else started;val timeout=if(lastDataAt>0)STREAM_STALL_TIMEOUT_MS else FIRST_DATA_TIMEOUT_MS;if(now-ref<timeout)return;if(noDataRecoveryAttempts>=MAX_NO_DATA_RECOVERY_ATTEMPTS){updateState("Bağlı fakat veri akmıyor; oksimetreyi/parmağı kontrol et");streamStartedAt=0;return};noDataRecoveryAttempts++;updateState("PC-60FW veri akışı durdu; bağlantı yenileniyor");lastDataAt=0;streamStartedAt=now;if(sdkRuntime.available)runCatching{sdkRuntime.restart()}else{disconnectGatt();handler.postDelayed({connectOrScan()},RECONNECT_DELAY_MS)}}
     private fun reconnectSoon(){handler.postDelayed({disconnectGatt();connectOrScan()},RECONNECT_DELAY_MS)}
     private fun disconnectGatt(){stopScan();val old=gatt;gatt=null;if(old!=null&&permissionsReady()){runCatching{old.disconnect()};runCatching{old.close()}}}
@@ -134,5 +136,5 @@ class Pc60BleService : Service() {
     private fun has(p:String)=ContextCompat.checkSelfPermission(this,p)==PackageManager.PERMISSION_GRANTED
     override fun onDestroy(){handler.removeCallbacksAndMessages(null);if(::sdkRuntime.isInitialized)sdkRuntime.stop();disconnectGatt();resetDataWatch();updateState("Kapalı");super.onDestroy()}
     override fun onBind(intent:Intent?):IBinder?=null
-    companion object{const val ACTION_RESCAN="com.skhealth.guardian.mobile.PC60_RESCAN";const val ACTION_STOP="com.skhealth.guardian.mobile.PC60_STOP";private const val CHANNEL="pc60_ble";private const val NOTIFICATION_ID=31;private const val SCAN_WINDOW_MS=15000L;private const val RESCAN_DELAY_MS=15000L;private const val RECONNECT_DELAY_MS=2000L;private const val WATCHDOG_INTERVAL_MS=5000L;private const val FIRST_DATA_TIMEOUT_MS=20000L;private const val STREAM_STALL_TIMEOUT_MS=8000L;private const val MAX_NO_DATA_RECOVERY_ATTEMPTS=2;private val SERVICE_UUID=UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");private val NOTIFY_UUID=UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");private val CCC_UUID=UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");private fun looksLikePc60(name:String):Boolean{val n=name.uppercase().replace(" ","");return n.contains("PC-60")||n.contains("PC60")}}
+    companion object{const val ACTION_RESCAN="com.skhealth.guardian.mobile.PC60_RESCAN";const val ACTION_STOP="com.skhealth.guardian.mobile.PC60_STOP";private const val CHANNEL="pc60_ble";private const val NOTIFICATION_ID=31;private const val SCAN_WINDOW_MS=15000L;private const val RESCAN_DELAY_MS=15000L;private const val RECONNECT_DELAY_MS=2000L;private const val WATCHDOG_INTERVAL_MS=5000L;private const val FIRST_DATA_TIMEOUT_MS=20000L;private const val STREAM_STALL_TIMEOUT_MS=8000L;private const val MEASUREMENT_STATE_HOLD_MS=3000L;private const val MAX_NO_DATA_RECOVERY_ATTEMPTS=2;private val SERVICE_UUID=UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");private val NOTIFY_UUID=UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");private val CCC_UUID=UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");private fun looksLikePc60(name:String):Boolean{val n=name.uppercase().replace(" ","");return n.contains("PC-60")||n.contains("PC60")}}
 }
