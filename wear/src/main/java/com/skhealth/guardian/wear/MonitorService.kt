@@ -165,7 +165,6 @@ class MonitorService : Service() {
                 false
             }
 
-            // SpO2 follow-up is time-sensitive. Do it before the slower HR confirmation path.
             if (followLowSpo2 && lowSpo2StartedAt != null) followLowSpO2(lowSpo2StartedAt)
 
             val confirmHr = hr != null && hr > activeConfig.heartRateHighThreshold
@@ -247,10 +246,11 @@ class MonitorService : Service() {
 
     private fun persistWatchSpO2Policy() {
         val snapshot = watchSpO2Policy.snapshot()
+        val observationSince = snapshot.observationSince
         val editor = getSharedPreferences(WATCH_SPO2_POLICY_PREFS, MODE_PRIVATE).edit()
             .putBoolean(KEY_ALARM_LATCHED, snapshot.alarmLatched)
-        if (snapshot.observationSince == null) editor.remove(KEY_OBSERVATION_SINCE)
-        else editor.putLong(KEY_OBSERVATION_SINCE, snapshot.observationSince)
+        if (observationSince == null) editor.remove(KEY_OBSERVATION_SINCE)
+        else editor.putLong(KEY_OBSERVATION_SINCE, observationSince)
         editor.apply()
     }
 
